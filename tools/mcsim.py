@@ -278,6 +278,28 @@ class Pack:
             self.cache[rl] = [l for l in lines if l and not l.startswith('#')]
         return self.cache[rl]
 
+    def using_item(self):
+        """[(item predicate, reward function)] of the minecraft:using_item advancements (overlays win)."""
+        if 'using_item' not in self.cache:
+            found = {}
+            sub = 'advancement' if self.format >= 45 else 'advancements'
+            for d in self.dirs:
+                data = os.path.join(d, 'data')
+                for ns in (os.listdir(data) if os.path.isdir(data) else []):
+                    base = os.path.join(data, ns, sub)
+                    for dirpath, _, files in os.walk(base):
+                        for f in files:
+                            rl = ns + ':' + os.path.relpath(os.path.join(dirpath, f), base)[:-5].replace(os.sep, '/')
+                            if f.endswith('.json') and rl not in found:
+                                found[rl] = json.load(open(os.path.join(dirpath, f)))
+            out = []
+            for adv in found.values():
+                for c in adv.get('criteria', {}).values():
+                    if c.get('trigger') == 'minecraft:using_item' and adv.get('rewards', {}).get('function'):
+                        out.append((c.get('conditions', {}).get('item', {}), adv['rewards']['function']))
+            self.cache['using_item'] = out
+        return self.cache['using_item']
+
     def tag(self, rl, seen=None):
         ns, path = rl.split(':', 1)
         tagdir = 'function' if self.format >= 45 else 'functions'
@@ -444,6 +466,10 @@ class Sim:
             return len(ents)
         if head == 'bossbar':
             return self.bossbar(t, cmd)
+        if head == 'time' and t[1:3] == ['query', 'gametime']:
+            return self.tick
+        if head == 'advancement':                   # rewards are triggered by actions; granting/revoking is a no-op
+            return 1
         if head == 'give':
             sel, rest = split_selector(cmd[5:])
             stack, _, count = rest.strip().rpartition(' ') if re.search(r' \d+$', rest.strip()) else (rest.strip(), '', '1')
@@ -872,11 +898,18 @@ class Sim:
             self.stat(p, 'totalKillCount')
         elif verb == 'use':
             item = w[2] if ':' in w[2] else 'minecraft:' + w[2]
-            self.stat(p, f'minecraft.used:{item}')
+            self.stat(p, 'minecraft.used:' + item.replace(':', '.'))
         elif verb == 'click':
             it = p.inv.get(p.selected) or p.inv.get(-106)
             if it:
-                self.stat(p, f'minecraft.used:{it["id"]}')
+                self.stat(p, 'minecraft.used:' + it['id'].replace(':', '.'))
+            # using_item advancements: the first hand whose item matches one is the one being used
+            for hand in (p.inv.get(p.selected), p.inv.get(-106)):
+                hits = [rw for pred, rw in self.pack.using_item() if hand and item_pred_matches(hand, pred)]
+                if hits:
+                    for rw in hits:
+                        self.run_function(rw, p)
+                    break
         elif verb == 'hold':
             p.selected = int(w[2])
         elif verb == 'offhand':
@@ -972,6 +1005,19 @@ def item_matches(item, pred):
     return True
 
 
+def item_pred_matches(item, pred):
+    """Advancement item predicate: optional "items" and predicates.minecraft:custom_data (SNBT string or object)."""
+    items = pred.get('items')
+    if items:
+        ids = [items] if isinstance(items, str) else items
+        if item['id'] not in [i if ':' in i else 'minecraft:' + i for i in ids]:
+            return False
+    cd = pred.get('predicates', {}).get('minecraft:custom_data')
+    if cd is not None:
+        return nbt_matches(Snbt.parse(cd) if isinstance(cd, str) else cd, item['custom'])
+    return True
+
+
 def nbt_matches(pattern, value):
     """NBT partial match, as in nbt={…} selectors: compounds by key, lists by 'every pattern element matches some element'."""
     if isinstance(pattern, dict):
@@ -1034,11 +1080,16 @@ def parse_actions(specs):
 
 def simulate(pack_dir, fmt=None, ticks=None, actions=()):
     """Runs a pack and returns the output lines. actions: [(tick, "join Steve"), …]"""
+    return simulate_state(pack_dir, fmt, ticks, actions)[0]
+
+
+def simulate_state(pack_dir, fmt=None, ticks=None, actions=()):
+    """Like simulate(), but also returns the finished Sim (scores, storage, the tick it stopped at)."""
     lines = []
     Entity.counter = 0
     sim = Sim(Pack(pack_dir, fmt), lines.append)
     sim.run_all(ticks, actions)
-    return lines
+    return lines, sim
 
 
 def main():

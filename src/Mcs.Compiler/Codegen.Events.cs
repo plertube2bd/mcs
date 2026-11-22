@@ -21,6 +21,24 @@ public sealed partial class Codegen
 
     readonly Dictionary<string, EventSource> eventSources = new();   // key: kind + argument
     readonly List<FnInfo> joinHandlers = new(), firstJoinHandlers = new(), respawnHandlers = new();
+    /// [OnRightClickObject] on items other than carrot/warped fungus on a stick (1.20.5+): the item gets a
+    /// never-ending food/consumable component, and the using_item advancement trigger detects the use.
+    readonly HashSet<string> clickObjects = new();                                        // ObjIds
+    readonly Dictionary<string, (ItemVar Item, List<FnInfo> Handlers)> useEvents = new();   // ObjId → handlers
+
+    static bool IsStickItem(string id) => id is "minecraft:carrot_on_a_stick" or "minecraft:warped_fungus_on_a_stick";
+
+    /// Which item objects need the use component — known before any `give` is generated.
+    void CollectClickObjects()
+    {
+        foreach (var info in fns.Values)
+            foreach (var attr in info.Sym.GetAttributes())
+                if (attr.AttributeClass?.Name == "OnRightClickObjectAttribute" && attr.ConstructorArguments.FirstOrDefault().Value is string name)
+                {
+                    var found = itemStatics.Where(kv => kv.Key.Name == name).Select(kv => kv.Value).ToList();
+                    if (found.Count == 1 && !IsStickItem(found[0].Id) && prof.ItemPredicates) clickObjects.Add(found[0].ObjId);
+                }
+    }
 
     string JoinedTag => $"mcs.{ns}.joined";
     string DeadTag => $"mcs.{ns}.dead";
@@ -62,15 +80,22 @@ public sealed partial class Codegen
             case "OnRightClick":
             {
                 string id = ResolveId("items", arg ?? "carrot_on_a_stick", at);
-                Source("use:" + id, $"{ns}.ev.use.{id[10..]}", $"minecraft.used:{id}").Handlers.Add(info);
+                Source("use:" + id, $"{ns}.ev.use.{id[10..]}", $"minecraft.used:{id.Replace(':', '.')}").Handlers.Add(info);
                 return;
             }
             case "OnRightClickObject":
             {
                 var item = ItemByName(arg ?? "", at);
-                if (item.Id is not ("minecraft:carrot_on_a_stick" or "minecraft:warped_fungus_on_a_stick"))
-                    throw new UnsupportedException(at, $"Right-click detection needs an item object made from carrot_on_a_stick or warped_fungus_on_a_stick (this one is {item.Id}).");
-                var src = Source("use:" + item.Id, $"{ns}.ev.use.{item.Id[10..]}", $"minecraft.used:{item.Id}");
+                if (!IsStickItem(item.Id))
+                {
+                    if (!prof.ItemPredicates)
+                        throw new UnsupportedException(at, $"Right-click detection for {item.Id} needs Minecraft 1.20.5+ (this build also targets older versions). " +
+                            "Build for 1.20.5 and above (--mc 1.20.5-… or \"minecraft\" in mcs.json), or make the item from carrot_on_a_stick / warped_fungus_on_a_stick, which work on every version.");
+                    if (!useEvents.TryGetValue(item.ObjId, out var ue)) useEvents[item.ObjId] = ue = (item, new());
+                    ue.Handlers.Add(info);
+                    return;
+                }
+                var src = Source("use:" + item.Id, $"{ns}.ev.use.{item.Id[10..]}", $"minecraft.used:{item.Id.Replace(':', '.')}");
                 src.Handlers.Add(info);
                 src.ObjectFilter[info] = item;
                 return;
@@ -81,6 +106,8 @@ public sealed partial class Codegen
                 return;
             case "OnStat":
                 if (arg == null || !Regex.IsMatch(arg, "^[A-Za-z0-9_.:-]+$")) throw new UnsupportedException(at, $"Invalid criterion '{arg}'.");
+                // minecraft.used:minecraft:stone → minecraft.used:minecraft.stone (stat names use '.', not ':')
+                if (arg.IndexOf(':') is var c && c >= 0) arg = arg[..(c + 1)] + arg[(c + 1)..].Replace(':', '.');
                 if (ReadOnlyCriteria.Contains(arg) || arg.StartsWith("teamkill.") || arg.StartsWith("killedByTeam."))
                     throw new UnsupportedException(at, $"'{arg}' is not a counter statistic, so it cannot be an event (use a counter such as minecraft.custom:minecraft.jump).");
                 Source("stat:" + arg, $"{ns}.ev.s{eventSources.Count(e => e.Key.StartsWith("stat:"))}", arg).Handlers.Add(info);
@@ -107,10 +134,36 @@ public sealed partial class Codegen
 
     void FinishEvents(List<string> load)
     {
-        if (eventSources.Count == 0 && joinHandlers.Count == 0 && firstJoinHandlers.Count == 0) return;
+        if (eventSources.Count == 0 && joinHandlers.Count == 0 && firstJoinHandlers.Count == 0 && useEvents.Count == 0) return;
         string dir = $"{ns}:__events";
         var tick = new List<string>();
         string Fn(string name, List<string> cmds) { pack.Functions[$"{dir}/{name}"] = cmds; return $"{dir}/{name}"; }
+
+        // Item objects with a use component: using_item fires every tick while the button is held, so a use
+        // counts as a click only when the item was not being used in the previous tick.
+        int u = 0;
+        foreach (var (objId, (item, handlers)) in useEvents)
+        {
+            string adv = $"{ns}:__obj/use{u}", last = $"{ns}.ev.u{u}", now = H("$__ev.now"), d = H("$__ev.d");
+            load.Add($"scoreboard objectives add {last} dummy");
+            var run = new List<string> { $"scoreboard players set {H("$__ev.value")} 1" };
+            foreach (var h in handlers) run.AddRange(CallHandler(h, H("$__ev.value")));
+            string runFn = Fn($"use{u}_run", run);
+            Fn($"use{u}", new()
+            {
+                $"advancement revoke @s only {adv}",
+                $"execute unless score @s {last} = @s {last} run scoreboard players set @s {last} -100",
+                $"execute store result score {now} run time query gametime",
+                $"scoreboard players operation {d} = {now}",
+                $"scoreboard players operation {d} -= @s {last}",
+                $"scoreboard players operation @s {last} = {now}",
+                $"execute unless score {d} matches 0..1 run function {runFn}",
+            });
+            pack.Advancements[adv] =
+                "{\"criteria\":{\"use\":{\"trigger\":\"minecraft:using_item\",\"conditions\":{\"item\":{\"predicates\":{\"minecraft:custom_data\":"
+                + Json.Str($"{{mcs_obj:{Json.Str(objId)}}}") + $"}}}}}}}}}},\"rewards\":{{\"function\":\"{dir}/use{u}\"}}}}";
+            u++;
+        }
 
         foreach (var s in eventSources.Values) load.Add($"scoreboard objectives add {s.Objective} {s.Criteria}");
         string value = H("$__ev.value");
@@ -164,6 +217,7 @@ public sealed partial class Codegen
                 tick.Add($"execute as @e[type=minecraft:player,tag={DeadTag}] at @s run function {Fn("respawn", resp)}");
             }
         }
+        if (tick.Count == 0) return;
         pack.Functions[$"{dir}/tick"] = tick;
         pack.TickTag.Add($"{dir}/tick");
     }

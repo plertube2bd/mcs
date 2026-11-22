@@ -106,3 +106,31 @@
 [t9] > give @a[tag=mcs.objects.kit.p] minecraft:carrot_on_a_stick 1
 [t10] * click Alex
 [t10] to Alex: Zap #3
+=== format 88 ===
+[t0] * join Steve
+[t0] > forceload add ~ ~
+[t0] > give @a minecraft:carrot_on_a_stick[minecraft:custom_data={mcs_obj:"objects:wand"},minecraft:custom_name={"text":"Magic Wand","italic":false},minecraft:lore=[{"text":"Right-click me","italic":false},{"text":"for sparks","italic":false}],minecraft:enchantment_glint_override=true] 1
+[t0] > give @a minecraft:carrot_on_a_stick[minecraft:custom_data={mcs_obj:"objects:wand"},minecraft:custom_name={"text":"Magic Wand","italic":false},minecraft:lore=[{"text":"Right-click me","italic":false},{"text":"for sparks","italic":false}],minecraft:enchantment_glint_override=true] 1
+[t0] > give @a minecraft:carrot_on_a_stick[minecraft:custom_data={mcs_obj:"objects:wand"},minecraft:custom_name={"text":"Magic Wand","italic":false},minecraft:lore=[{"text":"Right-click me","italic":false},{"text":"for sparks","italic":false}],minecraft:enchantment_glint_override=true] 1
+[t0] > summon minecraft:pig ~ ~ ~ {Tags:["mcs.objects.main.pig"]}
+[t0] [MC#] 'pig' was already used — an object can be used only once (use .Clone())
+[t0] [MC#] 'pig' was already used — an object can be used only once (use .Clone())
+[t0] > setblock ~ ~ ~ minecraft:stone
+[t0] > setblock ~ ~1 ~ minecraft:stone
+[t0] main done
+[t1] > give @a[tag=mcs.objects.kit.p] minecraft:carrot_on_a_stick[minecraft:custom_data={mcs_obj:"objects:wand"},minecraft:custom_name={"text":"Magic Wand","italic":false},minecraft:lore=[{"text":"Right-click me","italic":false},{"text":"for sparks","italic":false}],minecraft:enchantment_glint_override=true] 1
+[t1] > give @a[tag=mcs.objects.kit.p] minecraft:carrot_on_a_stick 1
+[t2] * click Steve
+[t2] to Steve: Zap #1
+[t3] * hold Steve 4
+[t4] * click Steve
+[t5] * offhand Steve 0
+[t6] * click Steve
+[t7] * hold Steve 5
+[t8] * click Steve
+[t8] to Steve: Zap #2
+[t9] * join Alex
+[t9] > give @a[tag=mcs.objects.kit.p] minecraft:carrot_on_a_stick[minecraft:custom_data={mcs_obj:"objects:wand"},minecraft:custom_name={"text":"Magic Wand","italic":false},minecraft:lore=[{"text":"Right-click me","italic":false},{"text":"for sparks","italic":false}],minecraft:enchantment_glint_override=true] 1
+[t9] > give @a[tag=mcs.objects.kit.p] minecraft:carrot_on_a_stick 1
+[t10] * click Alex
+[t10] to Alex: Zap #3

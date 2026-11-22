@@ -7,10 +7,12 @@ public sealed class CompiledPack
     public Dictionary<string, List<string>> Functions { get; } = new();
     public List<string> LoadTag { get; } = new();
     public List<string> TickTag { get; } = new();
+    public Dictionary<string, string> Advancements { get; } = new();   // <ns>:<path> → JSON
 
     public bool SameAs(CompiledPack o) =>
         LoadTag.SequenceEqual(o.LoadTag) && TickTag.SequenceEqual(o.TickTag)
         && Functions.Count == o.Functions.Count
+        && Advancements.Count == o.Advancements.Count && Advancements.All(kv => o.Advancements.TryGetValue(kv.Key, out var j) && j == kv.Value)
         && Functions.All(kv => o.Functions.TryGetValue(kv.Key, out var l) && l.SequenceEqual(kv.Value));
 }
 
@@ -66,6 +68,14 @@ public static class DatapackWriter
                 string file = Path.Combine(root, "data", path[..idx], layer.FunctionDir, path[(idx + 1)..] + ".mcfunction");
                 Directory.CreateDirectory(Path.GetDirectoryName(file)!);
                 File.WriteAllText(file, lines.Count == 0 ? "" : string.Join("\n", lines) + "\n");
+            }
+            foreach (var (path, json) in layer.Pack.Advancements)
+            {
+                int idx = path.IndexOf(':');
+                string advDir = layer.FunctionDir == "function" ? "advancement" : "advancements";   // renamed in 1.21
+                string file = Path.Combine(root, "data", path[..idx], advDir, path[(idx + 1)..] + ".json");
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                File.WriteAllText(file, json + "\n");
             }
             string tagDir = Path.Combine(root, "data", "minecraft", "tags", layer.FunctionDir);
             Directory.CreateDirectory(tagDir);

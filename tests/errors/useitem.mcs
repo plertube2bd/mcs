@@ -1,0 +1,6 @@
+// Ordinary items need 1.20.5+ for right-click detection (the default range starts at 1.20.1).
+use ItemLib;
+use PlayerLib;
+static Item staff = new Item("minecraft:stick");
+[OnRightClickObject(nameof(staff))] static void Cast(Player p) { }
+// @error Right-click detection for minecraft:stick needs Minecraft 1.20.5+

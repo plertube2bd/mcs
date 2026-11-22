@@ -167,6 +167,8 @@ public sealed partial class Codegen
             }
         }
 
+        CollectClickObjects();   // before any item stack is generated
+
         // 2. Generate functions
         foreach (var info in fns.Values)
         {
@@ -201,10 +203,12 @@ public sealed partial class Codegen
         var main = fns.Values.FirstOrDefault(f => f.Sym.Name == "Main" && f.Sym.ContainingType.Name == Preprocessor.GlobalClass && f.Sym.Parameters.Length == 0);
         if (main != null) start.Add($"function {main.Path}");
 
-        if (usesWorldSpawn && prof.ForceloadSpawn)
+        // Main/[Load] run at world spawn. Commands that change the world there fail when its chunk is not loaded.
+        bool touchesWorld = usesWorldSpawn || pack.Functions.Values.Any(f => f.Any(l => WorldCommand.IsMatch(l)));
+        if (touchesWorld && prof.ForceloadSpawn)
         {
-            // 1.21.9+: spawn chunks no longer exist, so nothing is loaded when #load runs.
-            // Force-load the spawn chunk and start once it has loaded.
+            // 1.21.9+: spawn chunks no longer exist, so nothing is loaded when #load runs (e.g. a server with no
+            // players online). Force-load the spawn chunk and start once it has loaded, like older versions did.
             load.Add("forceload add ~ ~");
             load.Add($"function {ns}:__boot");
             pack.Functions[$"{ns}:__boot"] = new()
@@ -220,6 +224,9 @@ public sealed partial class Codegen
         foreach (var f in fns.Values.Where(f => HasAttr(f.Sym, "TickAttribute"))) pack.TickTag.Add(f.Path);
         return pack;
     }
+
+    static readonly System.Text.RegularExpressions.Regex WorldCommand =
+        new(@"(^|\brun )(summon|setblock|fill|clone|place|particle|playsound) ", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     void DeclareStatic(SemanticModel model, VariableDeclaratorSyntax v)
     {
@@ -1575,7 +1582,7 @@ public sealed partial class Codegen
     void Error(Location loc, string msg)
     {
         if (msg.Length == 0) return;
-        var span = loc.GetLineSpan();
+        var span = loc.GetMappedLineSpan();
         Diags.Add(new Diag(span.Path, span.StartLinePosition.Line + 1, span.StartLinePosition.Character + 1, msg));
     }
 }

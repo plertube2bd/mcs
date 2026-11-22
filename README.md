@@ -7,7 +7,7 @@ A C#-like language that compiles to a Minecraft datapack (`.mcfunction`).
 - **Dependencies:** none. The output uses only vanilla commands.
 
 ## Documentation
-- **Development:** `python3 tests/run.py` runs the test suite in a simulator ([details](docs/compiling.md#9-tests-and-the-simulator)); `python3 editors/vscode/install.py` installs VS Code highlighting.
+- **Development:** `python3 tests/run.py` runs the test suite in a simulator, and `--real` also on real Minecraft servers ([details](docs/compiling.md#9-tests-and-the-simulator)); `python3 editors/vscode/install.py` installs the VS Code extension (highlighting and errors while you type).
 - [Compiling](docs/compiling.md)
 - [Library reference](docs/libraries.md)
 - [Language guide](docs/language.md) — entity classes, queries, `switch`, `[Inline]`/`Unroll`, tables, `asm $""`

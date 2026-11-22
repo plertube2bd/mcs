@@ -1,0 +1,44 @@
+=== format 41 ===
+[t0] * join Steve
+[t1] > give @a[tag=mcs.useitem.kit.p] minecraft:stick[minecraft:custom_data={mcs_obj:"useitem:staff"},minecraft:custom_name='{"text":"Staff","italic":false}',minecraft:food={nutrition:0,saturation:0f,can_always_eat:true,eat_seconds:1000000f}] 1
+[t1] > give @a[tag=mcs.useitem.kit.p] minecraft:stick[minecraft:custom_data={mcs_obj:"useitem:item"}] 1
+[t2] * click Steve
+[t2] to Steve: cast #1
+[t3] * click Steve
+[t6] * click Steve
+[t6] to Steve: cast #2
+[t8] * hold Steve 1
+[t9] * click Steve
+=== format 48 ===
+[t0] * join Steve
+[t1] > give @a[tag=mcs.useitem.kit.p] minecraft:stick[minecraft:custom_data={mcs_obj:"useitem:staff"},minecraft:custom_name='{"text":"Staff","italic":false}',minecraft:food={nutrition:0,saturation:0f,can_always_eat:true,eat_seconds:1000000f}] 1
+[t1] > give @a[tag=mcs.useitem.kit.p] minecraft:stick[minecraft:custom_data={mcs_obj:"useitem:item"}] 1
+[t2] * click Steve
+[t2] to Steve: cast #1
+[t3] * click Steve
+[t6] * click Steve
+[t6] to Steve: cast #2
+[t8] * hold Steve 1
+[t9] * click Steve
+=== format 57 ===
+[t0] * join Steve
+[t1] > give @a[tag=mcs.useitem.kit.p] minecraft:stick[minecraft:custom_data={mcs_obj:"useitem:staff"},minecraft:custom_name='{"text":"Staff","italic":false}',minecraft:consumable={consume_seconds:1000000f,animation:"none",sound:"minecraft:intentionally_empty",has_consume_particles:false}] 1
+[t1] > give @a[tag=mcs.useitem.kit.p] minecraft:stick[minecraft:custom_data={mcs_obj:"useitem:item"}] 1
+[t2] * click Steve
+[t2] to Steve: cast #1
+[t3] * click Steve
+[t6] * click Steve
+[t6] to Steve: cast #2
+[t8] * hold Steve 1
+[t9] * click Steve
+=== format 71 ===
+[t0] * join Steve
+[t1] > give @a[tag=mcs.useitem.kit.p] minecraft:stick[minecraft:custom_data={mcs_obj:"useitem:staff"},minecraft:custom_name={"text":"Staff","italic":false},minecraft:consumable={consume_seconds:1000000f,animation:"none",sound:"minecraft:intentionally_empty",has_consume_particles:false}] 1
+[t1] > give @a[tag=mcs.useitem.kit.p] minecraft:stick[minecraft:custom_data={mcs_obj:"useitem:item"}] 1
+[t2] * click Steve
+[t2] to Steve: cast #1
+[t3] * click Steve
+[t6] * click Steve
+[t6] to Steve: cast #2
+[t8] * hold Steve 1
+[t9] * click Steve

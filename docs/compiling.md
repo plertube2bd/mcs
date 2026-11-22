@@ -70,6 +70,8 @@ There are two ways to build. Both produce the same result.
 | `-n`, `--namespace <ns>` | Datapack namespace | First file name |
 | `--versions` | Lists supported versions, pack formats, and `#if` symbols | — |
 | `--emit-csharp` | Prints the C# that MC# syntax is converted into (for debugging) | — |
+| `--check` | Only reports errors; writes nothing (used by the editor) | — |
+| `--stdin <file>` | Reads the text of `<file>` from standard input instead of the disk (unsaved editor buffers) | — |
 
 ## 4. Target versions and branching
 
@@ -97,7 +99,7 @@ Build succeeded: out/versions (Minecraft 1.20.1 – 26.3)
 | 1.21+ | `functions/` folder renamed `function/` | Writes the right folder |
 | 1.21.2+ | Attribute IDs lose `generic.`; `boat` → `oak_boat` | Writes the right IDs |
 | 1.21.9+ | `pack.mcmeta` uses `min_format`/`max_format` | Writes the right fields |
-| 1.21.9+ | Spawn chunks removed (nothing is loaded when `#load` runs) | If `GetWorldSpawn()` is used, force-loads the spawn chunk and starts `Main` once it's loaded |
+| 1.21.9+ | Spawn chunks removed (nothing is loaded when `#load` runs) | If `GetWorldSpawn()` is used or the pack summons entities / places blocks, force-loads the spawn chunk and starts `Main` once it's loaded |
 
 ### Branching in your code (`#if`)
 
@@ -204,7 +206,7 @@ dotnet bin/Release/net8.0/mcs.dll ../../examples/hello.mcs -o ../../out/hello
 | `McData.cs`, `Data/mcdata.json` | Per-version block/item/entity/effect data; generates the block classes |
 | `Datapack.cs` | Branch merging, overlays, pack.mcmeta, file output |
 | `Program.cs` | CLI, `mcs.json` |
-| `tools/mcsim.py`, `tests/run.py` | Simulator and test runner (section 9) |
+| `tools/mcsim.py`, `tools/mcreal.py`, `tests/run.py` | Simulator, real-server runner and test runner (section 9) |
 | `editors/vscode/` | VS Code extension (section 10) |
 
 To support a new Minecraft version, add a line to `Versions.Releases`. If the new version changes behavior, add a property to `TargetProfile`.
@@ -238,10 +240,27 @@ python3 tools/mcsim.py out/hello --ticks 100
 - Tick order follows the game: `#tick` functions first, then scheduled functions.
 - **Scripted players** (`--do "TICK ACTION"` or `// @do` in tests; tick 0 = before load): `join NAME`, `leave NAME`, `die NAME`, `respawn NAME`, `kill NAME` (NAME killed something), `use NAME ITEM`, `stat NAME CRITERION [N]`, `trigger NAME OBJECTIVE [set|add N]`, `click NAME` (right-click with the held item), `hold NAME SLOT`, `offhand NAME SLOT`. Players have inventories (`/give` fills them; `if items` and `nbt={SelectedItem:…}` read them). Statistics update every objective with that criterion, `/trigger` needs `enable`, `@e` skips dead players, and messages to specific players print as `to Steve: …`.
 
+### Real Minecraft servers
+
+The simulator was written from the same understanding of the commands as the compiler, so a command the
+compiler gets wrong can also pass in the simulator. `--real` also runs every case and example on **real
+vanilla servers** (headless; `tools/mcreal.py`):
+
+```sh
+python3 tests/run.py --real                              # newest release of every pack format (15 servers)
+python3 tests/run.py --real --versions=1.20.1,1.21.11    # just these
+python3 tests/run.py --real --servers=2 arrays           # 2 servers at a time, only "arrays"
+```
+
+- Needs Java (21+, 25 for 26.x) and internet access the first time a version is used. Server jars are downloaded from Mojang once and kept in `~/.cache/mcs/servers`.
+- Each pack is enabled alone, run, and disabled again. On 1.20.3+ the server is frozen and advanced with `tick step`, so it runs exactly as many ticks as the simulator; 1.20.1/1.20.2 run in real time.
+- **Fails on** any ERROR/WARN line the server logs for the pack (a function that does not parse, a bad tag, advancement or overlay), and on **scores that differ from the simulator** (fake players such as `$x` / `#x`, read back with `scoreboard players list`).
+- Cases with scripted players (`// @do`) are only load-checked (there are no players on the server). The same goes for `[Tick]` cases on 1.20.1/1.20.2.
+
 ## 10. Editor support (VS Code)
 
 ```sh
 python3 editors/vscode/install.py              # packages a .vsix and installs it with `code`
 ```
 
-Highlighting for C# plus MC# syntax (`asm` contents as mcfunction, `use`, `new T : K x;`, `Wait`), snippets, `mcs.json` validation, and a `$mcs` problem matcher for build tasks. See [editors/vscode](../editors/vscode/README.md).
+**Errors while you type** (the extension runs the compiler with `--check` on the unsaved text; with an `mcs.json` the whole project is checked), highlighting for C# plus MC# syntax (`asm` contents as mcfunction, `use`, `new T : K x;`, `Wait`), snippets, `mcs.json` validation, and a `$mcs` problem matcher for build tasks. See [editors/vscode](../editors/vscode/README.md).

@@ -391,7 +391,14 @@ static Item wand = new Item("carrot_on_a_stick") { Name = "Magic Wand", Lore = "
 
 - **정체성:** 아이템 오브젝트마다 custom data `mcs_obj:"<ns>:<필드>"`가 들어갑니다. 복사본도 같은 값이라 `[OnRightClickObject]`는 모든 복사본에 반응합니다.
 - **버전:** 1.20.1–1.20.4는 NBT(`{display:{Name:…}}`), 1.20.5+는 아이템 컴포넌트, 1.21.5+는 텍스트 컴포넌트를 SNBT로 씁니다. 감지는 1.20.5 이전 `nbt={SelectedItem:…}`, 이후 `execute if items`입니다.
-- **우클릭**은 기본 아이템이 `carrot_on_a_stick`이나 `warped_fungus_on_a_stick`이어야 합니다 (다른 아이템은 컴파일 에러). 사용된 아이템은 게임처럼, 주 손이 그 아이템 종류면 주 손, 아니면 보조 손입니다.
+- **`carrot_on_a_stick` / `warped_fungus_on_a_stick` 우클릭**은 모든 버전에서 됩니다 (사용 통계). 사용된 아이템은 게임처럼, 주 손이 그 아이템 종류면 주 손, 아니면 보조 손입니다.
+- **다른 아이템 우클릭**은 **1.20.5+**가 필요합니다 (빌드 범위에 이전 버전이 있으면 컴파일 에러 — `--mc 1.20.5-…`로 빌드). 아이템에 끝나지 않는 사용 동작(1.20.5–1.21.1은 `food` 컴포넌트, 1.21.2+는 소리 없는 `consumable`)을 붙이고, `using_item` 발전과제로 핸들러를 실행합니다. 버튼을 누르고 있으면 한 번으로 셉니다. 한계: 1.20.5–1.21.1에서는 누르는 동안 먹는 동작과 소리가 납니다. 자체 우클릭 동작이 있는 아이템(활, 방패, 스폰 알 등)은 그 동작이 우선이고, 블록 아이템은 블록을 겨누면 설치됩니다.
+
+```csharp
+// @mc 1.20.5-26.3
+static Item staff = new Item("stick") { Name = "Staff" };
+[OnRightClickObject(nameof(staff))] static void Cast(Player p) { p.SendMessage("Cast!"); }
+```
 - 정적 아이템은 load마다 새로 만들어집니다 (`m.GiveObject(wand, …)`는 load당 한 번). 지역 아이템은 선언문이 실행될 때마다 만들어집니다.
 
 ---

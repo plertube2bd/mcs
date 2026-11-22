@@ -4,6 +4,10 @@
   tests/run.py              run everything
   tests/run.py arrays wait  run the cases whose name contains "arrays" or "wait"
   tests/run.py -u           rewrite the expected .out files from the current results (review the diff!)
+  tests/run.py --real       also run the cases and examples on real Minecraft servers (tools/mcreal.py):
+                            one server per pack format (or --versions=1.20.1,1.21.11), --servers=N at a time.
+                            Fails on any ERROR/WARN the server logs for a pack, and on scores that differ
+                            from the simulator (cases without scripted players only).
 
 Kinds of tests
   tests/cases/<name>.mcs    compiled for the whole default version range, then simulated (tools/mcsim.py) on
@@ -28,6 +32,7 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
 import mcsim  # noqa: E402
+import mcreal  # noqa: E402
 
 DLL = os.path.join(ROOT, 'src', 'Mcs.Compiler', 'bin', 'Release', 'net8.0', 'mcs.dll')
 ENV = dict(os.environ, PATH=os.path.expanduser('~/.dotnet') + os.pathsep + os.environ.get('PATH', ''), DOTNET_CLI_TELEMETRY_OPTOUT='1')
@@ -89,6 +94,97 @@ def run_error(path, tmp):
     return None if not missing else 'missing errors:\n  ' + '\n  '.join(missing) + '\ncompiler output:\n' + log
 
 
+def fake_player(holder):
+    """Scores compared with the real server: fake players ($x, #x) only — not entities or player names."""
+    return holder[:1] in '$#' and not re.fullmatch(r'#e\d+', holder)
+
+
+def real_scores(sim):
+    return {k: v for k, v in sim.scores.items() if fake_player(k[0])}
+
+
+def run_real_version(version, fmt, packs, log):
+    """packs: [(name, out_dir, case text or None)] → list of failure messages."""
+    import shutil
+    failures = []
+    work = tempfile.mkdtemp(prefix=f'mcs-real-{version}-')
+    try:
+        server = mcreal.Server(version, work)
+    except Exception as e:
+        shutil.rmtree(work, ignore_errors=True)
+        return [f'{version}: server did not start: {e}']
+    try:
+        order = [v for v, _ in mcreal.versions_from_compiler()]
+        for name, out_dir, text, mc in packs:
+            if mc:                                   # the case's own version range (// @mc)
+                lo, _, hi = mc.partition('-')
+                if not order.index(lo.strip()) <= order.index(version) <= order.index((hi or lo).strip()):
+                    continue
+            sim = None
+            ticks = 20
+            if text is not None:
+                d = dict(re.findall(r'^\s*//\s*@(\w+)\s+(.*?)\s*$', text, re.M))
+                try:
+                    _, sim = mcsim.simulate_state(out_dir, fmt, int(d['ticks']) if 'ticks' in d else None, actions(text))
+                    ticks = sim.tick if sim.pack.tag('minecraft:tick') else sim.tick + 20   # idle packs: slack is harmless (chunk loading)
+                except Exception as e:
+                    failures.append(f'{version} {name}: simulator crashed: {e}')
+                    continue
+            try:
+                found, scores = mcreal.run_pack(server, out_dir, ticks)
+            except Exception as e:
+                failures.append(f'{version} {name}: {e}')
+                break
+            msgs = list(found)
+            comparable = (sim is not None and not actions(text)
+                          and (mcreal.has_tick_command(version) or not sim.pack.tag('minecraft:tick')))
+            if comparable:
+                want = real_scores(sim)
+                objectives = {o for _, o in want} | set(sim.objectives)
+                got = {k: v for k, v in scores.items() if k[1] in objectives and fake_player(k[0])}
+                for k in sorted(set(want) | set(got)):
+                    if want.get(k) != got.get(k):
+                        msgs.append(f'score {k[0]} {k[1]}: simulator {want.get(k, "unset")}, Minecraft {got.get(k, "unset")}')
+            status = 'ok' if not msgs else f'{RED}FAIL{RESET}'
+            log(f'{status} {version:8} {name}' + ('' if comparable or sim is None else f' {DIM}(load check only){RESET}'))
+            if msgs:
+                shown = msgs if len(msgs) <= 15 else msgs[:15] + [f'… and {len(msgs) - 15} more']
+                failures.append(f'{version} {name}:\n      ' + '\n      '.join(m.replace('\n', '\n      ') for m in shown))
+    finally:
+        server.stop()
+        shutil.rmtree(work, ignore_errors=True)
+    return failures
+
+
+def run_real(cases, examples, tmp, versions, servers):
+    fmt_of = dict(mcreal.versions_from_compiler())
+    packs = []
+    for p in cases + examples:
+        is_case = p in cases
+        name = os.path.relpath(p, ROOT)
+        out_dir = os.path.join(tmp, 'real', os.path.basename(p))
+        d = directives(p)
+        ok, log = compile_mcs(p, out_dir, d[0].get('mc') if is_case else None)
+        if ok:
+            packs.append((name, out_dir, d[1] if is_case else None, d[0].get('mc') if is_case else None))
+    print(f'\n{DIM}real servers: {", ".join(versions)} ({len(packs)} packs each){RESET}')
+    for v in versions:                       # download first, one at a time
+        mcreal.server_jar(v, log=lambda m: print(f'{DIM}{m}{RESET}'))
+    lock = __import__('threading').Lock()
+
+    def log(m):
+        with lock:
+            print(m, flush=True)
+    failures = []
+    with concurrent.futures.ThreadPoolExecutor(servers) as pool:
+        for f in [pool.submit(run_real_version, v, fmt_of[v], packs, log) for v in versions]:
+            failures += f.result()
+    if failures:
+        print(f'\n{RED}real-server problems:{RESET}\n  ' + '\n  '.join(failures))
+    print(f'\nreal servers: {len(versions)} version(s), ' + (f'{RED}{len(failures)} problem(s){RESET}' if failures else f'{GREEN}all ok{RESET}'))
+    return not failures
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('-')]
     update = '-u' in sys.argv or '--update' in sys.argv
@@ -130,8 +226,14 @@ def main():
             else:
                 print(f'{GREEN}ok{RESET}   {rel}')
 
-    total = len(cases) + len(errors) + len(examples)
-    print(f'\n{total - len(failed)}/{total} passed' + (f' — {RED}{len(failed)} failed{RESET}' if failed else ''))
+        total = len(cases) + len(errors) + len(examples)
+        print(f'\n{total - len(failed)}/{total} passed' + (f' — {RED}{len(failed)} failed{RESET}' if failed else ''))
+
+        if '--real' in sys.argv:
+            opt = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--') and '=' in a)
+            versions = opt['versions'].split(',') if 'versions' in opt else mcreal.default_versions()
+            if not run_real(cases, examples, tmp, versions, int(opt.get('servers', 3))):
+                failed.append('real')
     sys.exit(1 if failed else 0)
 
 

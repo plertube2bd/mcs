@@ -240,6 +240,8 @@ public static class Preprocessor
             }
             else break;
         }
+        if (insertAt == 0)   // no usings: the header gets its own line, and #line keeps user line/column numbers exact
+            return $"public static partial class {GlobalClass} {{\n#line 1\n" + s + "\n}\n";
         return s[..insertAt] + $" public static partial class {GlobalClass} {{" + s[insertAt..] + "\n}\n";
     }
 }

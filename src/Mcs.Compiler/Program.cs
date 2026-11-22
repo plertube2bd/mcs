@@ -20,6 +20,8 @@ public static class Program
           -n, --namespace <ns>     Datapack namespace (default: name of the first file)
           -r, --resources <dir>    Extra files copied into the datapack as-is (e.g. data/<ns>/worldgen/...)
           --emit-csharp            Print the preprocessed C# source (for debugging)
+          --check                  Only report errors; write nothing (used by editors)
+          --stdin <file>           Read the text of <file> from standard input (unsaved editor buffers)
           --versions               List supported versions and #if symbols
 
         mcs.json:
@@ -36,7 +38,8 @@ public static class Program
     {
         var files = new List<string>();
         string? outDir = null, ns = null, mc = null, res = null, desc = null;
-        bool emitCs = false;
+        bool emitCs = false, check = false;
+        string? stdinFile = null;
 
         if (argv.Length > 0 && argv[0] == "build")
         {
@@ -57,6 +60,8 @@ public static class Program
                 case "--mc": mc = Next(); break;
                 case "-r" or "--resources": res = Next(); break;
                 case "--emit-csharp": emitCs = true; break;
+                case "--check": check = true; break;
+                case "--stdin": stdinFile = Next(); break;
                 case "--versions": PrintVersions(); return 0;
                 case "-h" or "--help": Console.WriteLine(Usage); return 0;
                 default:
@@ -71,10 +76,14 @@ public static class Program
         outDir ??= Path.Combine("out", ns);
         var (min, max) = Versions.ParseRange(mc ?? Versions.DefaultRange);
 
-        var result = Compiler.Compile(files.Select(f => (f, File.ReadAllText(f))).ToList(), ns, min, max);
+        string? stdinText = stdinFile != null ? Console.In.ReadToEnd() : null;
+        bool IsStdin(string f) => stdinFile != null && Path.GetFullPath(f) == Path.GetFullPath(stdinFile);
+        if (stdinFile != null && !files.Any(IsStdin)) files.Add(stdinFile);   // a new file not in the project yet
+        var result = Compiler.Compile(files.Select(f => (f, IsStdin(f) ? stdinText! : File.ReadAllText(f))).ToList(), ns, min, max);
         if (emitCs) foreach (var (f, cs) in result.Preprocessed) Console.WriteLine($"// ==== {f}\n{cs}");
         foreach (var d in result.Diagnostics) Console.Error.WriteLine(d);
         if (result.Layers == null) { Console.Error.WriteLine($"Build failed: {result.Diagnostics.Count} error(s)"); return 1; }
+        if (check) { Console.WriteLine("Check succeeded"); return 0; }
 
         DatapackWriter.Write(outDir, ns, desc ?? $"MC# datapack: {ns} ({min}-{max})", result.Layers);
         if (res != null)
@@ -182,7 +191,7 @@ public static class Compiler
             // Only check user code (binding every generated block class would be slow)
             var errs = userTrees.SelectMany(t => comp.GetSemanticModel(t).GetDiagnostics()).Where(d => d.Severity == DiagnosticSeverity.Error).Select(d =>
             {
-                var span = d.Location.GetLineSpan();
+                var span = d.Location.GetMappedLineSpan();
                 return new Diag(span.Path, span.StartLinePosition.Line + 1, span.StartLinePosition.Character + 1, $"{d.Id}: {d.GetMessage()}");
             }).ToList();
             if (errs.Count == 0)

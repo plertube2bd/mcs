@@ -1,18 +1,34 @@
 {
   "name": "mcs-language",
   "displayName": "MC# (Minecraft C#)",
-  "description": "Syntax highlighting, snippets and build-error matching for MC# (.mcs), a C#-like language that compiles to Minecraft datapacks.",
-  "version": "0.1.0",
+  "description": "Syntax highlighting, live error checking, snippets and build-error matching for MC# (.mcs), a C#-like language that compiles to Minecraft datapacks.",
+  "version": "0.2.0",
   "publisher": "mcs",
   "license": "MIT",
-  "engines": { "vscode": "^1.75.0" },
-  "categories": ["Programming Languages", "Snippets"],
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:mcs",
+    "workspaceContains:**/mcs.json"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "mcs",
-        "aliases": ["MC#", "mcs"],
-        "extensions": [".mcs"],
+        "aliases": [
+          "MC#",
+          "mcs"
+        ],
+        "extensions": [
+          ".mcs"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -21,23 +37,84 @@
         "language": "mcs",
         "scopeName": "source.mcs",
         "path": "./syntaxes/mcs.tmLanguage.json",
-        "embeddedLanguages": { "meta.embedded.mcfunction": "mcs" }
+        "embeddedLanguages": {
+          "meta.embedded.mcfunction": "mcs"
+        }
       }
     ],
-    "snippets": [{ "language": "mcs", "path": "./snippets/mcs.json" }],
-    "jsonValidation": [{ "fileMatch": "mcs.json", "url": "./schemas/mcs.schema.json" }],
+    "snippets": [
+      {
+        "language": "mcs",
+        "path": "./snippets/mcs.json"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "mcs.json",
+        "url": "./schemas/mcs.schema.json"
+      }
+    ],
     "problemMatchers": [
       {
         "name": "mcs",
         "owner": "mcs",
         "source": "MC#",
-        "fileLocation": ["relative", "${workspaceFolder}"],
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
         "pattern": {
           "regexp": "^(.*)\\((\\d+),(\\d+)\\): error MCS: (.*)$",
-          "file": 1, "line": 2, "column": 3, "message": 4
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
         },
         "severity": "error"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "mcs.check",
+        "title": "Check for errors",
+        "category": "MC#"
+      },
+      {
+        "command": "mcs.showOutput",
+        "title": "Show compiler output",
+        "category": "MC#"
+      }
+    ],
+    "configuration": {
+      "title": "MC#",
+      "properties": {
+        "mcs.diagnostics": {
+          "type": "string",
+          "enum": [
+            "onType",
+            "onSave",
+            "off"
+          ],
+          "default": "onType",
+          "enumDescriptions": [
+            "Check while typing (after a short pause) and on save",
+            "Check when a file is opened or saved",
+            "Do not run the compiler"
+          ],
+          "description": "When to run the MC# compiler to show errors in the editor."
+        },
+        "mcs.delay": {
+          "type": "number",
+          "default": 600,
+          "minimum": 100,
+          "description": "Milliseconds to wait after the last keystroke before checking (mcs.diagnostics = onType)."
+        },
+        "mcs.compiler": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Command that starts the compiler, e.g. `dotnet /path/to/mcs.dll` or `mcs`. Empty: use `src/Mcs.Compiler/bin/Release/net8.0/mcs.dll` from the workspace when it exists, otherwise `mcs` on the PATH."
+        }
+      }
+    }
   }
 }

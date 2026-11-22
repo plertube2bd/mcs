@@ -91,6 +91,10 @@ public sealed partial class Codegen
         if (lore != null) comps.Add($"minecraft:lore=[{string.Join(",", lore.Select(T))}]");
         if (it.Unbreakable) comps.Add("minecraft:unbreakable={}");
         if (it.Glint) comps.Add("minecraft:enchantment_glint_override=true");
+        if (clickObjects.Contains(it.ObjId))   // [OnRightClickObject] on an item that has no use action of its own
+            comps.Add(prof.ConsumableComponent
+                ? "minecraft:consumable={consume_seconds:1000000f,animation:\"none\",sound:\"minecraft:intentionally_empty\",has_consume_particles:false}"
+                : "minecraft:food={nutrition:0,saturation:0f,can_always_eat:true,eat_seconds:1000000f}");
         return $"{it.Id}[{string.Join(",", comps)}]";
     }
 
@@ -159,7 +163,7 @@ public sealed partial class Codegen
     void CheckNotDisposed(Var v, SyntaxNode at)
     {
         if (cur.Disposed.TryGetValue(v, out var where))
-            throw new UnsupportedException(at, $"'{at}' was disposed (line {where.GetLocation().GetLineSpan().StartLinePosition.Line + 1}) and cannot be used any more.");
+            throw new UnsupportedException(at, $"'{at}' was disposed (line {where.GetLocation().GetMappedLineSpan().StartLinePosition.Line + 1}) and cannot be used any more.");
     }
 
     /// Emits a consuming use of the object in `objExpr`. `emit` writes the commands that use it.
@@ -169,7 +173,7 @@ public sealed partial class Codegen
         if (!isVariable) { emit(); return; }   // a temporary (new … / x.Clone() inline): used once by construction
         CheckNotDisposed(v, objExpr);
         if (cur.Consumed.TryGetValue(v, out var first))
-            throw new UnsupportedException(site, $"'{Describe(objExpr)}' was already used (line {first.GetLocation().GetLineSpan().StartLinePosition.Line + 1}). " +
+            throw new UnsupportedException(site, $"'{Describe(objExpr)}' was already used (line {first.GetLocation().GetMappedLineSpan().StartLinePosition.Line + 1}). " +
                 "An object can be spawned / given / placed only once — use .Clone() to make another.");
         cur.Consumed[v] = site;
 

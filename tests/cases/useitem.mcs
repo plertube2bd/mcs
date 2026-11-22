@@ -1,0 +1,18 @@
+// [OnRightClickObject] on an ordinary item (1.20.5+): use component + using_item advancement.
+// @mc 1.20.5-26.3
+// @do 0 join Steve
+// @do 2 click Steve
+// @do 3 click Steve
+// @do 6 click Steve
+// @do 8 hold Steve 1
+// @do 9 click Steve
+use ItemLib;
+use PlayerLib;
+
+static Item staff = new Item("minecraft:stick") { Name = "Staff" };
+static int uses = 0;
+
+[OnFirstJoin] static void Kit(Player p) { m.GiveObject(staff.Clone(), p); m.GiveObject(new Item("minecraft:stick"), p); }
+
+[OnRightClickObject(nameof(staff))]
+static void Cast(Player p) { uses++; p.SendMessage($"cast #{uses}"); }

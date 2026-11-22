@@ -70,6 +70,8 @@ public static void Main() {
 | `-n`, `--namespace <ns>` | 데이터팩 네임스페이스 | 첫 번째 파일 이름 |
 | `--versions` | 지원 버전, 팩 포맷, `#if` 심볼 목록 출력 | — |
 | `--emit-csharp` | MC# 문법이 변환된 C# 코드 출력 (디버깅용) | — |
+| `--check` | 에러만 확인하고 아무것도 쓰지 않음 (에디터용) | — |
+| `--stdin <file>` | `<file>`의 내용을 디스크 대신 표준입력에서 읽음 (저장 안 한 에디터 내용) | — |
 
 ## 4. 대상 버전과 분기
 
@@ -97,7 +99,7 @@ Build succeeded: out/versions (Minecraft 1.20.1 – 26.3)
 | 1.21+ | `functions/` 폴더가 `function/`으로 변경 | 알맞은 폴더에 출력 |
 | 1.21.2+ | 속성 ID에서 `generic.` 제거, `boat` → `oak_boat` | 알맞은 ID로 출력 |
 | 1.21.9+ | `pack.mcmeta`가 `min_format`/`max_format` 사용 | 알맞은 필드로 출력 |
-| 1.21.9+ | 스폰 청크 삭제 (`#load` 실행 시점에 로드된 청크가 없음) | `GetWorldSpawn()`을 쓰면 스폰 청크를 forceload하고, 로드가 끝난 뒤 `Main` 시작 |
+| 1.21.9+ | 스폰 청크 삭제 (`#load` 실행 시점에 로드된 청크가 없음) | `GetWorldSpawn()`을 쓰거나 엔티티 소환·블록 설치를 하면 스폰 청크를 forceload하고, 로드가 끝난 뒤 `Main` 시작 |
 
 ### 코드 안에서 분기하기 (`#if`)
 
@@ -204,7 +206,7 @@ dotnet bin/Release/net8.0/mcs.dll ../../examples/hello.mcs -o ../../out/hello
 | `McData.cs`, `Data/mcdata.json` | 버전별 블록·아이템·엔티티·효과 데이터, 블록 클래스 생성 |
 | `Datapack.cs` | 분기 병합, 오버레이, pack.mcmeta, 파일 출력 |
 | `Program.cs` | CLI, `mcs.json` |
-| `tools/mcsim.py`, `tests/run.py` | 시뮬레이터와 테스트 러너 (9절) |
+| `tools/mcsim.py`, `tools/mcreal.py`, `tests/run.py` | 시뮬레이터, 실제 서버 실행기, 테스트 러너 (9절) |
 | `editors/vscode/` | VS Code 확장 (10절) |
 
 새 마인크래프트 버전을 지원하려면 `Versions.Releases`에 한 줄을 추가하세요. 새 버전에서 동작이 바뀌었다면 `TargetProfile`에 속성을 추가하면 됩니다.
@@ -238,10 +240,26 @@ python3 tools/mcsim.py out/hello --ticks 100
 - 틱 순서는 게임과 같습니다: `#tick` 함수 먼저, 그다음 예약된 함수.
 - **플레이어 스크립트** (`--do "틱 행동"` 또는 테스트의 `// @do`, 0틱 = load 전): `join 이름`, `leave 이름`, `die 이름`, `respawn 이름`, `kill 이름`(그 플레이어가 무언가를 처치), `use 이름 아이템`, `stat 이름 criterion [N]`, `trigger 이름 objective [set|add N]`, `click 이름`(들고 있는 아이템으로 우클릭), `hold 이름 슬롯`, `offhand 이름 슬롯`. 플레이어는 인벤토리가 있습니다 (`/give`로 채워지고 `if items`, `nbt={SelectedItem:…}`로 읽힘). 통계는 해당 criterion의 모든 objective에 반영되고, `/trigger`는 `enable`이 필요하며, `@e`는 죽은 플레이어를 고르지 않고, 특정 플레이어에게 보낸 메시지는 `to Steve: …`로 출력됩니다.
 
+### 실제 마인크래프트 서버
+
+시뮬레이터는 컴파일러와 같은 명령어 이해를 바탕으로 만들었기 때문에, 컴파일러가 틀린 명령어가 시뮬레이터에서도
+통과할 수 있습니다. `--real`을 붙이면 모든 케이스와 예제를 **실제 바닐라 서버**(화면 없음, `tools/mcreal.py`)에서도 실행합니다:
+
+```sh
+python3 tests/run.py --real                              # 팩 포맷마다 최신 릴리스 하나씩 (서버 15개)
+python3 tests/run.py --real --versions=1.20.1,1.21.11    # 이 버전만
+python3 tests/run.py --real --servers=2 arrays           # 서버 2개씩 동시에, "arrays"만
+```
+
+- Java(21+, 26.x는 25)가 필요하고, 처음 쓰는 버전은 인터넷에서 받습니다. 서버 jar는 Mojang에서 한 번 받아 `~/.cache/mcs/servers`에 보관합니다.
+- 팩을 하나씩 켜서 실행하고 다시 끕니다. 1.20.3+에서는 서버를 멈춘 뒤 `tick step`으로 진행해서 시뮬레이터와 정확히 같은 틱만큼 실행합니다. 1.20.1/1.20.2는 실제 시간으로 실행합니다.
+- **실패 조건:** 그 팩에 대해 서버가 남긴 ERROR/WARN 로그(파싱이 안 되는 함수, 잘못된 태그·발전과제·오버레이 등), 그리고 **시뮬레이터와 다른 점수**(`$x` / `#x` 같은 가짜 플레이어, `scoreboard players list`로 읽음).
+- 플레이어 스크립트(`// @do`)가 있는 케이스는 로드 검사만 합니다 (서버에 플레이어가 없음). 1.20.1/1.20.2의 `[Tick]` 케이스도 마찬가지입니다.
+
 ## 10. 에디터 지원 (VS Code)
 
 ```sh
 python3 editors/vscode/install.py              # .vsix를 만들고 `code`로 설치
 ```
 
-C# + MC# 문법 강조(`asm` 내용은 mcfunction으로), 스니펫, `mcs.json` 검증, 빌드 작업용 `$mcs` 문제 매처를 제공합니다. [editors/vscode](../../editors/vscode/README.md) 참고.
+**입력하는 동안 에러 표시**(확장이 저장하지 않은 내용으로 컴파일러를 `--check` 실행. `mcs.json`이 있으면 프로젝트 전체 검사), C# + MC# 문법 강조(`asm` 내용은 mcfunction으로), 스니펫, `mcs.json` 검증, 빌드 작업용 `$mcs` 문제 매처를 제공합니다. [editors/vscode](../../editors/vscode/README.md) 참고.

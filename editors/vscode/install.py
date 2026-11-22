@@ -13,7 +13,7 @@ import zipfile
 from xml.sax.saxutils import escape
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FILES = ['package.json', 'language-configuration.json', 'README.md',
+FILES = ['package.json', 'extension.js', 'language-configuration.json', 'README.md',
          'syntaxes/mcs.tmLanguage.json', 'snippets/mcs.json', 'schemas/mcs.schema.json']
 
 
@@ -35,7 +35,7 @@ def package():
 </PackageManifest>
 """
     types = ('<?xml version="1.0" encoding="utf-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-             '<Default Extension=".json" ContentType="application/json"/><Default Extension=".md" ContentType="text/markdown"/>'
+             '<Default Extension=".json" ContentType="application/json"/><Default Extension=".js" ContentType="application/javascript"/><Default Extension=".md" ContentType="text/markdown"/>'
              '<Default Extension=".vsixmanifest" ContentType="text/xml"/></Types>')
     with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr('[Content_Types].xml', types)

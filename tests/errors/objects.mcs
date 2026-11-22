@@ -21,6 +21,6 @@ public static void Main() {
 // @error 'z' was already used (line 11)
 // @error 's' was disposed (line 14)
 // @error 'wand' was already used (line 16)
-// @error Right-click detection needs an item object made from carrot_on_a_stick
+// @error Right-click detection for minecraft:apple needs Minecraft 1.20.5+
 // @error No static Item field named 'nothing'
 // @error Static objects cannot be reassigned

@@ -391,7 +391,14 @@ static Item wand = new Item("carrot_on_a_stick") { Name = "Magic Wand", Lore = "
 
 - **Identity:** every item object carries custom data `mcs_obj:"<ns>:<field>"`. Clones keep it, so `[OnRightClickObject]` reacts to all copies.
 - **Versions:** 1.20.1–1.20.4 write NBT (`{display:{Name:…}}`), 1.20.5+ item components, and 1.21.5+ text components as SNBT. Detection uses `nbt={SelectedItem:…}` before 1.20.5 and `execute if items` after.
-- **Right-click** needs `carrot_on_a_stick` or `warped_fungus_on_a_stick` as the base item (anything else is a compile error). The used item is the main-hand one if it is that item type, otherwise the off-hand one — like the game.
+- **Right-click on `carrot_on_a_stick` / `warped_fungus_on_a_stick`** works on every version (use statistic). The used item is the main-hand one if it is that item type, otherwise the off-hand one — like the game.
+- **Right-click on any other item** needs **1.20.5+** (with an older version in the range it is a compile error — build with `--mc 1.20.5-…`). The item gets a use action that never finishes (`food` component on 1.20.5–1.21.1, a silent `consumable` on 1.21.2+), and a `using_item` advancement runs the handler. Holding the button down counts as one click. Limits: on 1.20.5–1.21.1 the player shows the eating animation and sound while holding the button; items with their own right-click action (bow, shield, spawn eggs, …) keep it; block items still place blocks when aimed at a block.
+
+```csharp
+// @mc 1.20.5-26.3
+static Item staff = new Item("stick") { Name = "Staff" };
+[OnRightClickObject(nameof(staff))] static void Cast(Player p) { p.SendMessage("Cast!"); }
+```
 - Static items are recreated on every load (so `m.GiveObject(wand, …)` works once per load); local items each time their declaration runs.
 
 ---

@@ -225,7 +225,7 @@ use PlayerLib;
 
 - **Parameters** are optional: a `Player` (that player) and an `int`. Several methods may share an event; they run in source order.
 - **How it works:** one tick function (`<ns>:__events/tick`) checks the event objectives (`<ns>.ev.*`, created on load), runs the handlers with `execute as @a[scores={…=1..}] at @s` and resets the counters. Events are noticed within the same tick.
-- **Right-click** detection only works for `carrot_on_a_stick` and `warped_fungus_on_a_stick`. Other items count when they are actually used (eaten, thrown, placed, …). Item IDs are checked per version.
+- **`[OnRightClick(item)]`** detects a right-click only for `carrot_on_a_stick` and `warped_fungus_on_a_stick`; other items count when they are actually used (eaten, thrown, placed, …). Item IDs are checked per version. For a right-click on any item, use an [item object](libraries.md#itemlib) with `[OnRightClickObject]` (1.20.5+).
 - **Join:** players online when the pack is first installed count as first-time joiners. There is no "leave" event (nothing can run for a player who left).
 - **Respawn** uses the fact that `@e` only selects living entities, so it also works with `doImmediateRespawn`.
 - **Triggers:** every player is re-enabled each tick. The objective name is what players type, so pick a unique one.
