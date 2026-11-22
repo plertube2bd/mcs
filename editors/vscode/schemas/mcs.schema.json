@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MC# project (mcs.json)",
+  "type": "object",
+  "properties": {
+    "namespace": {
+      "type": "string",
+      "pattern": "^[a-z0-9_.-]+$",
+      "description": "Datapack namespace"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Source files or globs (e.g. src/*.mcs)"
+    },
+    "output": {
+      "type": "string",
+      "description": "Output datapack folder (default: out/<namespace>)"
+    },
+    "minecraft": {
+      "type": "string",
+      "pattern": "^\\d+(\\.\\d+)*(-\\d+(\\.\\d+)*)?$",
+      "description": "Target version or range, e.g. 1.21.4 or 1.20.1-26.3"
+    },
+    "resources": {
+      "type": "string",
+      "description": "Folder copied into the datapack as-is"
+    },
+    "description": {
+      "type": "string",
+      "description": "pack.mcmeta description"
+    }
+  },
+  "required": [
+    "namespace",
+    "sources"
+  ],
+  "additionalProperties": false
+}

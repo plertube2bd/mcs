@@ -1,0 +1,161 @@
+{
+  "Main": {
+    "prefix": "main",
+    "body": [
+      "public static void Main()",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Entry point (runs on load)"
+  },
+  "Tick method": {
+    "prefix": "tick",
+    "body": [
+      "[Tick] public static void ${1:OnTick}()",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Runs every tick"
+  },
+  "Load method": {
+    "prefix": "load",
+    "body": [
+      "[Load] public static void ${1:Init}()",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Runs on every load"
+  },
+  "asm block": {
+    "prefix": "asm",
+    "body": [
+      "asm {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Raw commands"
+  },
+  "WriteLine": {
+    "prefix": "cw",
+    "body": [
+      "m.Console.WriteLine($\"$0\");"
+    ],
+    "description": "tellraw @a"
+  },
+  "Wait": {
+    "prefix": "wait",
+    "body": [
+      "Wait(${1:20});"
+    ],
+    "description": "Pause this method (ticks)"
+  },
+  "Entity class": {
+    "prefix": "entityclass",
+    "body": [
+      "[Entity(\"minecraft:${1:marker}\", \"${2:ns.tag}\")]",
+      "public partial class ${3:Name} : EntityObject",
+      "{",
+      "\tpublic int ${4:Value};",
+      "\t$0",
+      "}"
+    ],
+    "description": "Entity class"
+  },
+  "foreach entity": {
+    "prefix": "foreache",
+    "body": [
+      "foreach (var ${1:e} in Entities.All<${2:T}>())",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Run as each entity"
+  },
+  "Scoreboard class": {
+    "prefix": "dummy",
+    "body": [
+      "public class ${1:name} : dummy {}",
+      "m.Mount(${1:name}, \"${2:objective}\");"
+    ],
+    "description": "Class bound to an objective"
+  },
+  "Mount": {
+    "prefix": "mount",
+    "body": [
+      "static int ${1:name};",
+      "m.Mount(${1:name}, \"${2:objective}.${3:holder}\");"
+    ],
+    "description": "Field bound to a score"
+  },
+  "Array": {
+    "prefix": "arr",
+    "body": [
+      "static int[] ${1:name} = new int[${2:10}];"
+    ],
+    "description": "Writable array"
+  },
+  "Board": {
+    "prefix": "board",
+    "body": [
+      "static Board ${1:board} = new Board(\"${2:id}\", \"${3:Title}\");"
+    ],
+    "description": "Sidebar board (use GuiLib;)"
+  },
+  "BossBar": {
+    "prefix": "bossbar",
+    "body": [
+      "static BossBar ${1:bar} = new BossBar(\"${2:id}\", \"${3:Title}\");"
+    ],
+    "description": "Boss bar (use GuiLib;)"
+  },
+  "Player event": {
+    "prefix": "onevent",
+    "body": [
+      "[${1|OnJoin,OnFirstJoin,OnDeath,OnRespawn,OnKill|}] static void ${2:Handler}(Player p)",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Player event (use PlayerLib;)"
+  },
+  "Right-click event": {
+    "prefix": "onrightclick",
+    "body": [
+      "[OnRightClick(\"${1:carrot_on_a_stick}\")] static void ${2:OnUse}(Player p)",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Right-click with an item"
+  },
+  "Trigger event": {
+    "prefix": "ontrigger",
+    "body": [
+      "[OnTrigger(\"${1:menu}\")] static void ${2:OnMenu}(Player p, int value)",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "/trigger without operator permission"
+  },
+  "Item object": {
+    "prefix": "item",
+    "body": [
+      "static Item ${1:wand} = new Item(\"${2:carrot_on_a_stick}\") { Name = \"${3:Magic Wand}\" };"
+    ],
+    "description": "Item object (use ItemLib;)"
+  },
+  "Right-click object event": {
+    "prefix": "onrightclickobject",
+    "body": [
+      "[OnRightClickObject(nameof(${1:wand}))] static void ${2:Use}(Player p)",
+      "{",
+      "\t$0",
+      "}"
+    ],
+    "description": "Right-click with an item object"
+  }
+}

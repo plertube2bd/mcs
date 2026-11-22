@@ -11,3 +11,7 @@ out/
 .idea/
 *.swp
 .DS_Store
+
+# Packaged editor extensions
+*.vsix
+__pycache__/

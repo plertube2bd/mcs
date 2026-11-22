@@ -1,0 +1,43 @@
+{
+  "name": "mcs-language",
+  "displayName": "MC# (Minecraft C#)",
+  "description": "Syntax highlighting, snippets and build-error matching for MC# (.mcs), a C#-like language that compiles to Minecraft datapacks.",
+  "version": "0.1.0",
+  "publisher": "mcs",
+  "license": "MIT",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Programming Languages", "Snippets"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "mcs",
+        "aliases": ["MC#", "mcs"],
+        "extensions": [".mcs"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "mcs",
+        "scopeName": "source.mcs",
+        "path": "./syntaxes/mcs.tmLanguage.json",
+        "embeddedLanguages": { "meta.embedded.mcfunction": "mcs" }
+      }
+    ],
+    "snippets": [{ "language": "mcs", "path": "./snippets/mcs.json" }],
+    "jsonValidation": [{ "fileMatch": "mcs.json", "url": "./schemas/mcs.schema.json" }],
+    "problemMatchers": [
+      {
+        "name": "mcs",
+        "owner": "mcs",
+        "source": "MC#",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.*)\\((\\d+),(\\d+)\\): error MCS: (.*)$",
+          "file": 1, "line": 2, "column": 3, "message": 4
+        },
+        "severity": "error"
+      }
+    ]
+  }
+}

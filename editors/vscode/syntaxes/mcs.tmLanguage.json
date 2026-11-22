@@ -1,0 +1,312 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MC#",
+  "scopeName": "source.mcs",
+  "comment": "C# plus MC#-only syntax. MC# rules are injected so they also apply inside class and method bodies.",
+  "patterns": [
+    {
+      "include": "#mcs"
+    },
+    {
+      "include": "source.cs"
+    }
+  ],
+  "injections": {
+    "L:source.mcs -comment -string -meta.embedded.mcfunction": {
+      "patterns": [
+        {
+          "include": "#mcs"
+        }
+      ]
+    }
+  },
+  "repository": {
+    "mcs": {
+      "patterns": [
+        {
+          "include": "#asm-block"
+        },
+        {
+          "include": "#asm-interpolated"
+        },
+        {
+          "include": "#asm-line"
+        },
+        {
+          "include": "#use"
+        },
+        {
+          "include": "#new-kind"
+        },
+        {
+          "include": "#builtins"
+        }
+      ]
+    },
+    "asm-block": {
+      "begin": "\\b(asm)\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.asm.mcs"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.begin.mcs"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.mcs"
+        }
+      },
+      "contentName": "meta.embedded.mcfunction",
+      "patterns": [
+        {
+          "include": "#mcfunction"
+        }
+      ]
+    },
+    "asm-interpolated": {
+      "comment": "asm $\"...\": the string itself is a C# interpolated string",
+      "match": "\\b(asm)(?=\\s*\\$)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.asm.mcs"
+        }
+      }
+    },
+    "asm-line": {
+      "begin": "\\b(asm)\\s+(?![{$])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.asm.mcs"
+        }
+      },
+      "end": "(;)|$",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.terminator.statement.mcs"
+        }
+      },
+      "contentName": "meta.embedded.mcfunction",
+      "patterns": [
+        {
+          "match": "\\G\\s*(/?[a-z_]+)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.control.command.mcfunction"
+            }
+          }
+        },
+        {
+          "include": "#mcfunction"
+        }
+      ]
+    },
+    "use": {
+      "match": "^\\s*(use)\\s+([\\w.]+)\\s*(;)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.directive.using.mcs"
+        },
+        "2": {
+          "name": "entity.name.type.namespace.mcs"
+        },
+        "3": {
+          "name": "punctuation.terminator.statement.mcs"
+        }
+      }
+    },
+    "new-kind": {
+      "comment": "new Entity : Zombie x;",
+      "match": "\\b(new)\\s+([A-Za-z_]\\w*)\\s*(:)\\s*([A-Za-z_]\\w*)\\s+([A-Za-z_]\\w*)\\s*(?=;)",
+      "captures": {
+        "1": {
+          "name": "keyword.operator.expression.new.mcs"
+        },
+        "2": {
+          "name": "entity.name.type.mcs"
+        },
+        "3": {
+          "name": "punctuation.separator.colon.mcs"
+        },
+        "4": {
+          "name": "variable.other.enummember.mcs"
+        },
+        "5": {
+          "name": "entity.name.variable.local.mcs"
+        }
+      }
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "match": "\\b(Wait)\\s*(?=\\()",
+          "captures": {
+            "1": {
+              "name": "support.function.builtin.mcs"
+            }
+          }
+        },
+        {
+          "match": "(?<=:\\s*)\\b(dummy)\\b",
+          "captures": {
+            "1": {
+              "name": "support.class.builtin.mcs"
+            }
+          }
+        }
+      ]
+    },
+    "mcfunction": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.mcfunction",
+          "match": "^\\s*#.*$"
+        },
+        {
+          "include": "#mcf-command-start"
+        },
+        {
+          "match": "\\b(run)\\s+(/?[a-z_]+)\\b",
+          "captures": {
+            "1": {
+              "name": "keyword.other.subcommand.mcfunction"
+            },
+            "2": {
+              "name": "keyword.control.command.mcfunction"
+            }
+          }
+        },
+        {
+          "name": "variable.parameter.macro.mcfunction",
+          "match": "\\$\\(\\w+\\)"
+        },
+        {
+          "include": "#mcf-selector"
+        },
+        {
+          "include": "#mcf-json-string"
+        },
+        {
+          "name": "entity.name.tag.resource.mcfunction",
+          "match": "#?\\b[a-z0-9_.-]+:[a-z0-9_./-]+"
+        },
+        {
+          "name": "keyword.other.subcommand.mcfunction",
+          "match": "\\b(as|at|if|unless|store|result|success|positioned|rotated|facing|anchored|align|in|on|matches|score|entity|block|blocks|data|predicate|function|items|loaded|storage|players|objectives|operation|set|add|remove|get|reset|modify|value|from|append|merge|with|setdisplay)\\b"
+        },
+        {
+          "name": "constant.language.mcfunction",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.numeric.mcfunction",
+          "match": "(?<![\\w.])(?:[~^](?:-?\\d*\\.?\\d+)?|-?\\d*\\.\\.-?\\d*|-?\\d*\\.?\\d+[bsldfBSLDF]?)(?![\\w])"
+        },
+        {
+          "name": "keyword.operator.mcfunction",
+          "match": "(=|\\+=|-=|\\*=|/=|%=|<|>|><)(?=\\s)"
+        },
+        {
+          "include": "#mcf-braces"
+        }
+      ]
+    },
+    "mcf-command-start": {
+      "match": "^\\s*(/?[a-z_]+)\\b",
+      "captures": {
+        "1": {
+          "name": "keyword.control.command.mcfunction"
+        }
+      }
+    },
+    "mcf-selector": {
+      "patterns": [
+        {
+          "begin": "(@[aeprsn])(\\[)",
+          "beginCaptures": {
+            "1": {
+              "name": "variable.language.selector.mcfunction"
+            },
+            "2": {
+              "name": "punctuation.definition.selector.begin.mcfunction"
+            }
+          },
+          "end": "\\]",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.selector.end.mcfunction"
+            }
+          },
+          "patterns": [
+            {
+              "match": "([a-z_]+)\\s*(=)\\s*(!?)",
+              "captures": {
+                "1": {
+                  "name": "variable.other.property.mcfunction"
+                },
+                "2": {
+                  "name": "keyword.operator.assignment.mcfunction"
+                },
+                "3": {
+                  "name": "keyword.operator.logical.mcfunction"
+                }
+              }
+            },
+            {
+              "include": "#mcfunction"
+            }
+          ]
+        },
+        {
+          "name": "variable.language.selector.mcfunction",
+          "match": "@[aeprsn]\\b"
+        }
+      ]
+    },
+    "mcf-json-string": {
+      "patterns": [
+        {
+          "match": "(\"(?:[^\"\\\\]|\\\\.)*\")(?=\\s*:)",
+          "captures": {
+            "1": {
+              "name": "support.type.property-name.json"
+            }
+          }
+        },
+        {
+          "name": "string.quoted.double.mcfunction",
+          "match": "\"(?:[^\"\\\\]|\\\\.)*\""
+        },
+        {
+          "name": "string.quoted.single.mcfunction",
+          "match": "'(?:[^'\\\\]|\\\\.)*'"
+        }
+      ]
+    },
+    "mcf-braces": {
+      "comment": "balanced braces so JSON inside asm { \u2026 } does not end the block",
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.dictionary.begin.mcfunction"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.dictionary.end.mcfunction"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#mcf-json-string"
+        },
+        {
+          "include": "#mcfunction"
+        }
+      ]
+    }
+  }
+}
