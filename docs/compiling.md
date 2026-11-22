@@ -191,6 +191,8 @@ dotnet build -c Release
 dotnet bin/Release/net8.0/mcs.dll ../../examples/hello.mcs -o ../../out/hello
 ```
 
+**Install as the `mcs` command:** `tools/install.sh` publishes the compiler to `~/.local/share/mcs` and creates `~/.local/bin/mcs` (run it again after pulling changes; `PREFIX=/usr/local` for another place, `--uninstall` to remove). `~/.local/bin` must be on your `PATH` (fish: `fish_add_path ~/.local/bin`).
+
 | File | Role |
 |---|---|
 | `Versions.cs` | Version table and per-version features. **All version branching is decided here.** |

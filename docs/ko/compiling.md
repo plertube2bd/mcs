@@ -191,6 +191,8 @@ dotnet build -c Release
 dotnet bin/Release/net8.0/mcs.dll ../../examples/hello.mcs -o ../../out/hello
 ```
 
+**`mcs` 명령으로 설치:** `tools/install.sh`가 컴파일러를 `~/.local/share/mcs`에 배포하고 `~/.local/bin/mcs`를 만듭니다 (코드를 받은 뒤 다시 실행하면 업데이트, 다른 위치는 `PREFIX=/usr/local`, 제거는 `--uninstall`). `~/.local/bin`이 `PATH`에 있어야 합니다 (fish: `fish_add_path ~/.local/bin`).
+
 | 파일 | 역할 |
 |---|---|
 | `Versions.cs` | 버전 표와 버전별 기능. **버전 분기는 전부 여기서 결정됩니다.** |
