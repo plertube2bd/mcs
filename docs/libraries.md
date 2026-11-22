@@ -9,6 +9,9 @@ MC# ships with five built-in libraries. All of them compile into the datapack it
 | **BlockLib** | `use BlockLib;` | `Block` and one class per block (`OakStairs`, `Stone`, …), `m.SetBlockObject`/`FillBlockObject`/`IsBlockObject` |
 | **PlayerLib** | `use PlayerLib;` | `Player` (control, inventory slots, effects, …), `Slot`, `GameMode` |
 | **TuiLib** | `use TuiLib;` | Clickable chat `Button`, styled `Text`, `Tui.Menu`/`Print`/`Title` |
+| **MathLib** | `use MathLib;` | `Math.Sin`/`Cos`/`Tan`, `Math.FloorDiv`/`FloorMod`, `Math.PI`/`Tau`/`Deg2Rad`/`Rad2Deg` |
+| **ItemLib** | `use ItemLib;` | Item objects (`new Item(id) { Name = … }`), `m.GiveObject`, `[OnRightClickObject]` |
+| **GuiLib** | `use GuiLib;` | `Gui.SetDisplay`/`ClearDisplay`, `Board` (sidebar / tab list / below name), `BossBar` |
 
 ### IDs are checked per version
 
@@ -38,6 +41,7 @@ asm {                                  // several commands: one command per line
 
 - A leading `/` is stripped automatically.
 - Lines starting with `#` are kept as mcfunction comments.
+- **At the top level** (outside any method), `asm` runs on load, in source order, before `[Load]` methods and `Main` — handy for creating objectives that `m.Mount` uses.
 - MC# variables can't be used inside `asm` (it is raw text).
 
 ### `m.Console.WriteLine(value)`
@@ -54,7 +58,8 @@ m.Console.WriteLine($"UUID: {string.Join("", x.uuid)}");
 |---|---|
 | Constants | Calculated at compile time, shown as text |
 | `int` | Score value |
-| `float` / `double` | `-12.345` (3 decimal places) |
+| `float` | `-12.345` (3 decimal places) |
+| `double` | `-12.34567` (5 decimal places) |
 | `bool` | `True` / `False` |
 | `Entity`, `Player` | Name (selector) |
 | `Button`, `Text` | Clickable button / styled text |
@@ -122,6 +127,37 @@ SetWorldSpawn(new Position(100, 70, -20));
 ```
 
 `Main()` is the entry point and runs automatically after the `[Load]` methods.
+
+### `m.Mount` — bind variables to existing scores
+
+```csharp
+asm scoreboard objectives add test dummy      // an objective made by you or another datapack
+
+static int hello;
+m.Mount(hello, "test.hello");                 // hello ⇄ score of "hello" in objective "test"
+
+public class test : dummy {}                  // a scoreboard class: one objective
+m.Mount(test, "test");                        // test.<name> ⇄ score of "<name>" in "test"
+
+public static void Main()
+{
+    hello += 10;                              // scoreboard players add hello test 10
+    test.hello = 0;                           // same score as `hello`
+    test.coins = test.coins + 5;              // fields are declared automatically on first use
+}
+```
+
+| Form | Meaning |
+|---|---|
+| `m.Mount(field, "objective.holder")` | Binds a `static int` / `bool` field. The string is split at the **last** `.` |
+| `m.Mount(field, "objective", "holder")` | Same, for holder names that contain a `.` |
+| `public class X : dummy {}` | Scoreboard class. Every `static int`/`bool` field is a holder (the field name) in its objective. Writing `X.name` declares `public static int name` automatically (declare `bool` fields yourself) |
+| `m.Mount(X, "objective")` | Sets the class's objective. Without it the objective is `<ns>.<x>` |
+
+- **Compile-time and global:** a mount is a declaration — it applies to every use of the field in the whole program, wherever it is written (at the top level or inside a method). It emits no command.
+- **Objectives:** scoreboard classes create their objective on load (`scoreboard objectives add <obj> dummy`; harmless if it exists). A field mount (`"test.hello"`) does not create anything — the objective must exist.
+- **Initial values:** a mounted field is never reset. `static int x = 5;` sets the score only if it has no value yet.
+- Only `static int` / `bool` fields (scores are integers).
 
 ---
 
@@ -306,6 +342,126 @@ public static void OnNo() {
 How it works:
 - **Clicks:** buttons use `/trigger` (objective `mcs.<ns>.btn`), so **any player can click them without operator permission**. A tick function dispatches clicks to your method.
 - **Version-specific components:** text component formats change between versions (`clickEvent` → `click_event` on 1.21.5+), and the compiler writes the right one.
+
+---
+
+## MathLib
+
+```csharp
+use MathLib;
+
+double a = 30 * Math.Deg2Rad;
+double s = Math.Sin(a);          // 0.5
+float  c = Math.Cos(1.0f);       // float overload → float result
+```
+
+| Member | Description |
+|---|---|
+| `Math.Sin(x)`, `Math.Cos(x)`, `Math.Tan(x)` | Radians. `double` and `float` overloads |
+| `Math.PI`, `Math.Tau`, `Math.Deg2Rad`, `Math.Rad2Deg` | Constants (folded at compile time) |
+| `Math.FloorDiv(a, b)`, `Math.FloorMod(a, b)` | `int` division rounded down / remainder with the divisor's sign. One scoreboard command each (the `/` and `%` operators follow C# instead — see the [language guide](language.md#division-and-remainder)) |
+
+How it works:
+- **Number format:** `double` is Q15.16 fixed point (score = value × 65536, precision 1/65536, range about ±32768). `float` stays ×1000. Mixing them converts automatically; a `double` → `float` assignment needs a cast, as in C#.
+- **Lookup table, not a Taylor series:** the angle is reduced modulo 2π, turned into a position on a 1024-step circle, and looked up in a 257-entry quarter-wave sine table (with symmetry for the other quadrants) plus linear interpolation between neighbours. The table is a binary tree of `execute if score … matches` functions, so it works on every version (no macros). Error is within about 2/65536 over the whole range.
+- `Cos(x)` is the same table shifted by a quarter turn; `Tan(x)` is `Sin/Cos` with a Q15.16 division and saturates to ±32767.99 near ±π/2.
+- Constant arguments are computed at compile time.
+- `double * double` and `double / double` need more than 32 bits, so they call shared helpers (`<ns>:__math/dmul`, `__math/ddiv`) that split the operands into 16-bit halves (multiply) or do 16-step long division (divide). Multiplication is floored, division rounds toward zero (like C#), and both are exact; a division whose result does not fit saturates to ±2147483647/65536. Multiplying or dividing by a whole-number constant stays a single scoreboard operation.
+- The helpers and the table are only emitted when used.
+
+## ItemLib
+
+```csharp
+use ItemLib;
+use PlayerLib;
+
+static Item wand = new Item("carrot_on_a_stick") { Name = "Magic Wand", Lore = "Right-click me\nfor sparks", Glint = true };
+
+[OnFirstJoin] static void Kit(Player p) { m.GiveObject(wand.Clone(), p); }   // every player gets a copy
+[OnRightClickObject(nameof(wand))] static void Zap(Player p) { p.SendMessage("Zap!"); }
+```
+
+| Member | Description |
+|---|---|
+| `new Item(id)` | An item object. Properties (compile-time constants): `Name`, `Lore` (`\n` = new line), `Unbreakable`, `Glint` |
+| `m.GiveObject(item, players, count = 1)` | `/give` — **consumes** the object (see [objects](language.md#objects-single-use)) |
+| `item.Clone()` | A new object with the same contents **and the same identity** |
+| `item.Dispose()` | Discards the object |
+| `[OnRightClickObject(nameof(field))]` | Event: a player right-clicked while holding this item (or one of its clones) |
+
+- **Identity:** every item object carries custom data `mcs_obj:"<ns>:<field>"`. Clones keep it, so `[OnRightClickObject]` reacts to all copies.
+- **Versions:** 1.20.1–1.20.4 write NBT (`{display:{Name:…}}`), 1.20.5+ item components, and 1.21.5+ text components as SNBT. Detection uses `nbt={SelectedItem:…}` before 1.20.5 and `execute if items` after.
+- **Right-click** needs `carrot_on_a_stick` or `warped_fungus_on_a_stick` as the base item (anything else is a compile error). The used item is the main-hand one if it is that item type, otherwise the off-hand one — like the game.
+- Static items are recreated on every load (so `m.GiveObject(wand, …)` works once per load); local items each time their declaration runs.
+
+---
+
+## GuiLib
+
+```csharp
+use GuiLib;
+use PlayerLib;
+
+static Board stats = new Board("stats", "Stats");      // objective <ns>.board.stats
+static BossBar timer = new BossBar("timer", "Time");   // boss bar <ns>:timer
+
+public static void Main()
+{
+    stats.Set("Kills", 0);
+    stats.Show();                                       // sidebar
+    Gui.SetDisplay(DisplaySlot.BelowName, "my.objective");
+
+    timer.Max = 60;
+    timer.Color = BarColor.Red;
+    timer.Show(Player.All);
+    for (int t = 60; t > 0; t--)
+    {
+        timer.Value = t;
+        timer.Title = $"Time: {t}";
+        Wait(20);
+    }
+    timer.Hide();
+}
+```
+
+### `Gui`
+
+| Method | Command |
+|---|---|
+| `Gui.SetDisplay(DisplaySlot slot, string objective)` | `scoreboard objectives setdisplay <slot> <objective>` (any objective, e.g. a `[Score]` field's `<ns>.<field>`) |
+| `Gui.SetDisplay(DisplaySlot slot, Board board)` | Shows a board in a slot |
+| `Gui.ClearDisplay(DisplaySlot slot)` | Empties the slot |
+
+`DisplaySlot`: `Sidebar`, `List` (tab list), `BelowName` (written as `belowName` on 1.20.1 and `below_name` on 1.20.2+).
+
+### `Board`
+
+A scoreboard display with its own dummy objective `<ns>.board.<id>`, created on load. Boards with the same id are the same board, so `new Board("stats")` in any method refers to it; a `static` field works too.
+
+| Member | Description |
+|---|---|
+| `new Board(id, title = id)` | `id`: lowercase letters, digits, `_ . -`. `title`: string constant |
+| `Title = "..."` | Changes the display name |
+| `Show(slot = Sidebar)` / `Hide(slot = Sidebar)` | Show it in / clear a slot |
+| `Set(string line, int value)` | Sets a sidebar line (a fake player name without spaces); the value may be a runtime value |
+| `Set(Player players, int value)` | Sets players' scores (what `List` / `BelowName` show) |
+| `Get(string line)` | Reads a line's value |
+| `Remove(string line)` / `Clear()` | Removes one line / all lines |
+
+### `BossBar`
+
+A boss bar `<ns>:<id>`, created on load (the title is refreshed on every load). Same id → same bar.
+
+| Member | Description |
+|---|---|
+| `new BossBar(id, title = id)` | `title`: string constant |
+| `Value`, `Max` | Read/write. Runtime values are written with `execute store result bossbar` |
+| `Title = ...` | Text; interpolated values (`$"Time: {t}"`) are filled in when set |
+| `Color = BarColor.Red` | `Blue Green Pink Purple Red White Yellow` |
+| `Style = BarStyle.Notched10` | `Progress Notched6 Notched10 Notched12 Notched20` |
+| `Visible = ...` | Constant or runtime `bool` |
+| `Show(Player players)` / `Hide()` | Sets who sees it / hides it from everyone |
+| `Remove()` | Deletes the bar (it comes back on the next `/reload`) |
 
 ---
 

@@ -191,12 +191,57 @@ dotnet bin/Release/net8.0/mcs.dll ../../examples/hello.mcs -o ../../out/hello
 | File | Role |
 |---|---|
 | `Versions.cs` | Version table and per-version features. **All version branching is decided here.** |
-| `Preprocessor.cs` | Converts MC#-only syntax (`use`, `new T : K x;`, `asm`) to C# |
+| `Preprocessor.cs` | Converts MC#-only syntax (`use`, `new T : K x;`, `asm`, top-level `asm` / `m.Mount`) to C# |
 | `Prelude.cs` | C# declarations of the built-in libraries (see the [library reference](libraries.md)) |
 | `Codegen.cs` | Syntax tree → mcfunction (core language) |
 | `Codegen.Libs.cs` | BlockLib / PlayerLib / TuiLib / SpawnEntity / SetWorldSpawn |
+| `Codegen.Math.cs` | `double` (Q15.16) multiply/divide helpers, C# integer division helpers, MathLib (sin/cos/tan lookup table) |
+| `Codegen.Gui.cs` | GuiLib (display slots, `Board`, `BossBar`) |
+| `Codegen.Array.cs` | Writable arrays (element scores, runtime-index lookup trees) |
+| `Codegen.Objects.cs` | ItemLib, object single-use rule (`Clone`, `Dispose`, run-time guard) |
+| `Codegen.Events.cs` | Player events (`[OnJoin]`, `[OnDeath]`, …) |
+| `Codegen.Mount.cs`, `Mount.cs` | `m.Mount` bindings; scoreboard classes (`class X : dummy`, auto-declared fields) |
 | `McData.cs`, `Data/mcdata.json` | Per-version block/item/entity/effect data; generates the block classes |
 | `Datapack.cs` | Branch merging, overlays, pack.mcmeta, file output |
 | `Program.cs` | CLI, `mcs.json` |
+| `tools/mcsim.py`, `tests/run.py` | Simulator and test runner (section 9) |
+| `editors/vscode/` | VS Code extension (section 10) |
 
 To support a new Minecraft version, add a line to `Versions.Releases`. If the new version changes behavior, add a property to `TargetProfile`.
+
+## 9. Tests and the simulator
+
+```sh
+python3 tests/run.py              # everything (builds the compiler first)
+python3 tests/run.py arrays wait  # only cases whose name contains "arrays" or "wait"
+python3 tests/run.py -u           # rewrite the expected outputs — review the git diff afterwards
+```
+
+| Folder | What is checked |
+|---|---|
+| `tests/cases/*.mcs` | Compiled for the whole version range, then **run in the simulator on every version layer** the build produced. The output must equal `<name>.out`. If layers behave differently (e.g. `belowName` vs `below_name`), the `.out` file has one `=== format N ===` section per layer. |
+| `tests/errors/*.mcs` | Must fail to compile, and every `// @error <text>` line must appear in the errors. |
+| `examples/*.mcs` | Must compile. |
+
+Directives in a case: `// @mc 1.20.2-26.3` (version range), `// @ticks 100` (how long to simulate; the default is until nothing is scheduled, or 20 ticks when there are `[Tick]` methods), and `// @do 5 die Steve` (a scripted player action, repeatable — see below).
+
+**Simulator** (`tools/mcsim.py`) runs a built datapack without Minecraft:
+
+```sh
+python3 tools/mcsim.py out/hello               # newest version layer
+python3 tools/mcsim.py out/hello --format 15   # as 1.20.1
+python3 tools/mcsim.py out/hello --ticks 100
+```
+
+- **Simulated:** scoreboards (32-bit wraparound, floor division), data storage and function macros, `function` / `schedule` / `#tick` / `#load`, `execute` (`if`/`unless score|entity|data`, `as`, `store …`), `tellraw` / `say`, a small entity model (`summon`, `tag`, `kill`, selectors with `type=`, `tag=`, `name=`, `scores=`, `limit=`), and scripted players. `maxCommandChainLength` is enforced, so endless loops show up.
+- **Not simulated:** blocks, positions, entity NBT (players exist only when scripted). Such commands are printed as `> <command>`, so the output doubles as a trace. Commands that Minecraft would reject print as `! <error>`.
+- Tick order follows the game: `#tick` functions first, then scheduled functions.
+- **Scripted players** (`--do "TICK ACTION"` or `// @do` in tests; tick 0 = before load): `join NAME`, `leave NAME`, `die NAME`, `respawn NAME`, `kill NAME` (NAME killed something), `use NAME ITEM`, `stat NAME CRITERION [N]`, `trigger NAME OBJECTIVE [set|add N]`, `click NAME` (right-click with the held item), `hold NAME SLOT`, `offhand NAME SLOT`. Players have inventories (`/give` fills them; `if items` and `nbt={SelectedItem:…}` read them). Statistics update every objective with that criterion, `/trigger` needs `enable`, `@e` skips dead players, and messages to specific players print as `to Steve: …`.
+
+## 10. Editor support (VS Code)
+
+```sh
+python3 editors/vscode/install.py              # packages a .vsix and installs it with `code`
+```
+
+Highlighting for C# plus MC# syntax (`asm` contents as mcfunction, `use`, `new T : K x;`, `Wait`), snippets, `mcs.json` validation, and a `$mcs` problem matcher for build tasks. See [editors/vscode](../editors/vscode/README.md).

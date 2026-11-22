@@ -7,6 +7,7 @@ A C#-like language that compiles to a Minecraft datapack (`.mcfunction`).
 - **Dependencies:** none. The output uses only vanilla commands.
 
 ## Documentation
+- **Development:** `python3 tests/run.py` runs the test suite in a simulator ([details](docs/compiling.md#9-tests-and-the-simulator)); `python3 editors/vscode/install.py` installs VS Code highlighting.
 - [Compiling](docs/compiling.md)
 - [Library reference](docs/libraries.md)
 - [Language guide](docs/language.md) — entity classes, queries, `switch`, `[Inline]`/`Unroll`, tables, `asm $""`
@@ -54,31 +55,37 @@ Methods and fields can be written at the top level without a class. They are wra
 
 | MC# | Minecraft |
 |---|---|
-| `int`, `bool` | scoreboard (`mcs.<ns>` objective) |
-| `float`, `double` | scoreboard, fixed-point ×1000 (3 decimal places) |
+| `int`, `bool` | scoreboard (`mcs.<ns>` objective), or any score via `m.Mount` |
+| `float` | scoreboard, fixed-point ×1000 (1/1000 precision) |
+| `double` | scoreboard, Q15.16 fixed-point ×65536 (1/65536 precision, range ±32768) |
+| `int[]`, `bool[]`, `float[]`, `double[]` | one score per element; runtime indexes via a lookup tree |
 | `string` | **compile-time constants only** (no runtime string processing) |
 | `Entity` | tag (`@e[tag=…,limit=1]`) |
 | `Position` | execute prefix (`at …` / `positioned …`) |
 
 ### Supported constructs
-`if/else`, `while`, `for`, `do-while`, `break`, `continue`, `return` (with a value), `?:`, `&&`/`||` (short-circuit), `+ - * / %`, compound assignment, `++/--`, static method calls, string interpolation (`Console.WriteLine`).
+`if/else`, `while`, `for`, `do-while`, `break`, `continue`, `return` (with a value), `?:`, `&&`/`||` (short-circuit), `+ - * / %` (C# semantics: `/` rounds toward zero, `%` takes the dividend's sign), compound assignment, `++/--`, static method calls, string interpolation (`Console.WriteLine`), `Wait()` (pause the method for a tick), arrays (`int[] a = new int[10]; a[i] += 1;`).
 
 ### Built-in libraries
 | Library | Contents |
 |---|---|
-| Core | `asm`, `m.Console.WriteLine`, `Position` (`GetWorldSpawn()`, `.Offset()`), `SpawnEntity(id, pos, count)`, `SetWorldSpawn(pos)`, `m.SetBlock` / `m.FillBlock` / `m.IsBlock`, `[Load]`, `[Tick]` |
+| Core | `asm`, `Wait()`, player events (`[OnJoin]`, `[OnDeath]`, `[OnRightClick]`, `[OnTrigger]`, …), `m.Mount` (bind fields / `class X : dummy` to existing scores), `m.Console.WriteLine`, `Position` (`GetWorldSpawn()`, `.Offset()`), `SpawnEntity(id, pos, count)`, `SetWorldSpawn(pos)`, `m.SetBlock` / `m.FillBlock` / `m.IsBlock`, `[Load]`, `[Tick]` |
 | `use EntityLib;` | `new Entity : Zombie x;`, entity properties, `m.SpawnEntityObject` |
 | `use BlockLib;` | A class for every block with typed states (`new Block : OakStairs s; s.Facing = Facing.East;`), `m.SetBlockObject` / `m.FillBlockObject` |
 | `use PlayerLib;` | `Player.All` / `Self` / `Named(...)`: messages, effects, xp, gamemode, **per-slot inventory control** (`SetSlot`, `SwapSlots`, `IsSlot`, …) |
 | `use TuiLib;` | Clickable chat buttons wired to MC# methods (`new Button("[OK]", OnOk)`), styled text, menus |
+| `use MathLib;` | `Math.Sin` / `Cos` / `Tan` (lookup table, Q15.16), `Math.FloorDiv` / `FloorMod`, `Math.PI`, `Deg2Rad` |
+| `use ItemLib;` | Item objects with names/lore, `m.GiveObject`, `[OnRightClickObject(nameof(item))]` |
+| `use GuiLib;` | `Gui.SetDisplay` / `ClearDisplay`, sidebar/tab-list `Board`, `BossBar` |
 
 Block/item/entity/effect IDs are validated per target version. See the [library reference](docs/libraries.md).
 
 ## Limitations (current version)
 - **No recursion**: variables are static per function.
-- Plain (non-entity) instance classes, writable arrays and runtime strings are not supported.
+- Plain (non-entity) instance classes and runtime strings are not supported. Arrays have a compile-time length.
 - Runtime attribute values (`x.maxHealth = hp;`) need 1.20.2+ (macros).
-- Scoreboard division rounds toward negative infinity (it differs from C# for negative numbers).
+- Objects (entity / block / item) are single use: spawning, placing or giving one twice is a compile error (or skipped at run time in loops); use `.Clone()`.
+- `Wait()` loses the execution context (`@s`, position): the rest of the method runs from `/schedule`.
 - `GetWorldSpawn()` uses a marker placed at load time. If `/setworldspawn` changes the spawn, run `/reload`.
 
 ## License

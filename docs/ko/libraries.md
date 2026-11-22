@@ -9,6 +9,9 @@ MC#에는 내장 라이브러리가 다섯 개 있습니다. 모두 데이터팩
 | **BlockLib** | `use BlockLib;` | `Block`과 블록마다 하나씩 있는 클래스(`OakStairs`, `Stone`, …), `m.SetBlockObject`/`FillBlockObject`/`IsBlockObject` |
 | **PlayerLib** | `use PlayerLib;` | `Player` (제어, 인벤토리 칸, 효과 등), `Slot`, `GameMode` |
 | **TuiLib** | `use TuiLib;` | 클릭할 수 있는 채팅 `Button`, 스타일 `Text`, `Tui.Menu`/`Print`/`Title` |
+| **MathLib** | `use MathLib;` | `Math.Sin`/`Cos`/`Tan`, `Math.FloorDiv`/`FloorMod`, `Math.PI`/`Tau`/`Deg2Rad`/`Rad2Deg` |
+| **ItemLib** | `use ItemLib;` | 아이템 오브젝트(`new Item(id) { Name = … }`), `m.GiveObject`, `[OnRightClickObject]` |
+| **GuiLib** | `use GuiLib;` | `Gui.SetDisplay`/`ClearDisplay`, `Board`(사이드바 / 탭 목록 / 이름 아래), `BossBar` |
 
 ### ID는 버전별로 검사됩니다
 
@@ -38,6 +41,7 @@ asm {                                  // 명령어 여러 개: 한 줄에 하�
 
 - 맨 앞의 `/`는 자동으로 제거됩니다.
 - `#`으로 시작하는 줄은 mcfunction 주석으로 남습니다.
+- **최상위**(메서드 밖)에 쓴 `asm`은 load 시 소스 순서대로, `[Load]` 메서드와 `Main`보다 먼저 실행됩니다. `m.Mount`가 쓸 objective를 만들 때 유용합니다.
 - `asm` 안에서는 MC# 변수를 쓸 수 없습니다 (그대로 텍스트로 들어갑니다).
 
 ### `m.Console.WriteLine(value)`
@@ -54,7 +58,8 @@ m.Console.WriteLine($"UUID: {string.Join("", x.uuid)}");
 |---|---|
 | 상수 | 컴파일할 때 계산해서 텍스트로 표시 |
 | `int` | 스코어 값 |
-| `float` / `double` | `-12.345` (소수점 3자리) |
+| `float` | `-12.345` (소수점 3자리) |
+| `double` | `-12.34567` (소수점 5자리) |
 | `bool` | `True` / `False` |
 | `Entity`, `Player` | 이름 (셀렉터) |
 | `Button`, `Text` | 클릭 가능한 버튼 / 스타일 텍스트 |
@@ -122,6 +127,37 @@ SetWorldSpawn(new Position(100, 70, -20));
 ```
 
 `Main()`은 진입점이며, `[Load]` 메서드들이 실행된 다음 자동으로 실행됩니다.
+
+### `m.Mount` — 변수를 기존 스코어에 연결
+
+```csharp
+asm scoreboard objectives add test dummy      // 직접 또는 다른 데이터팩이 만든 objective
+
+static int hello;
+m.Mount(hello, "test.hello");                 // hello ⇄ objective "test"의 "hello" 점수
+
+public class test : dummy {}                  // 스코어보드 클래스: objective 하나
+m.Mount(test, "test");                        // test.<이름> ⇄ "test"의 "<이름>" 점수
+
+public static void Main()
+{
+    hello += 10;                              // scoreboard players add hello test 10
+    test.hello = 0;                           // `hello`와 같은 점수
+    test.coins = test.coins + 5;              // 처음 쓸 때 필드가 자동으로 선언됨
+}
+```
+
+| 형태 | 의미 |
+|---|---|
+| `m.Mount(필드, "objective.holder")` | `static int` / `bool` 필드를 연결. 문자열은 **마지막** `.`에서 나눔 |
+| `m.Mount(필드, "objective", "holder")` | 같음. holder 이름에 `.`이 들어갈 때 사용 |
+| `public class X : dummy {}` | 스코어보드 클래스. `static int`/`bool` 필드 하나가 objective 안의 holder(필드 이름) 하나. `X.이름`을 쓰면 `public static int 이름`이 자동 선언됨 (`bool` 필드는 직접 선언) |
+| `m.Mount(X, "objective")` | 클래스의 objective 지정. 없으면 `<ns>.<x>` |
+
+- **컴파일 타임 + 전역:** Mount는 선언입니다. 최상위든 메서드 안이든 어디에 쓰든 프로그램 전체의 해당 필드 사용에 적용되고, 명령어는 생성하지 않습니다.
+- **objective 생성:** 스코어보드 클래스는 load 시 objective를 만듭니다 (`scoreboard objectives add <obj> dummy`, 이미 있으면 무해). 필드 Mount(`"test.hello"`)는 아무것도 만들지 않으므로 objective가 있어야 합니다.
+- **초깃값:** 연결된 필드는 초기화되지 않습니다. `static int x = 5;`는 점수가 아직 없을 때만 설정합니다.
+- `static int` / `bool` 필드만 가능합니다 (스코어는 정수).
 
 ---
 
@@ -306,6 +342,126 @@ public static void OnNo() {
 동작 방식:
 - **클릭:** 버튼은 `/trigger`(objective `mcs.<ns>.btn`)를 사용하므로 **OP 권한이 없는 플레이어도 클릭할 수 있습니다.** 틱 함수가 클릭을 감지해 지정한 메서드를 호출합니다.
 - **버전별 컴포넌트:** 텍스트 컴포넌트 형식은 버전마다 다르지만(1.21.5 이상에서 `clickEvent` → `click_event`) 컴파일러가 알맞은 형식으로 출력합니다.
+
+---
+
+## MathLib
+
+```csharp
+use MathLib;
+
+double a = 30 * Math.Deg2Rad;
+double s = Math.Sin(a);          // 0.5
+float  c = Math.Cos(1.0f);       // float 오버로드 → float 결과
+```
+
+| 멤버 | 설명 |
+|---|---|
+| `Math.Sin(x)`, `Math.Cos(x)`, `Math.Tan(x)` | 라디안 단위. `double`, `float` 오버로드 |
+| `Math.PI`, `Math.Tau`, `Math.Deg2Rad`, `Math.Rad2Deg` | 상수 (컴파일 타임에 계산) |
+| `Math.FloorDiv(a, b)`, `Math.FloorMod(a, b)` | `int` 내림 나눗셈 / 제수 부호를 따르는 나머지. 각각 스코어보드 명령어 하나 (`/`, `%` 연산자는 C#을 따릅니다 — [언어 가이드](language.md#나눗셈과-나머지) 참고) |
+
+동작 방식:
+- **수 형식:** `double`은 Q15.16 고정소수점입니다 (스코어 = 값 × 65536, 정밀도 1/65536, 범위 약 ±32768). `float`은 그대로 ×1000입니다. 섞어 쓰면 자동 변환되고, `double` → `float` 대입은 C#처럼 캐스트가 필요합니다.
+- **테일러 급수가 아닌 룩업 테이블:** 각도를 2π로 나눈 나머지로 줄인 뒤 1024등분 원 위의 위치로 바꾸고, 257칸짜리 1/4 주기 사인 테이블(나머지 사분면은 대칭)에서 찾은 다음 이웃 칸 사이를 선형 보간합니다. 테이블은 `execute if score … matches` 함수의 이진 트리라서 모든 버전에서 동작합니다 (매크로 불필요). 전체 범위에서 오차는 약 2/65536 이내입니다.
+- `Cos(x)`는 같은 테이블을 1/4 바퀴 민 것이고, `Tan(x)`는 Q15.16 나눗셈으로 구한 `Sin/Cos`이며 ±π/2 근처에서는 ±32767.99로 포화됩니다.
+- 인자가 상수면 컴파일 타임에 계산합니다.
+- `double * double`, `double / double`은 32비트를 넘는 중간값이 필요해서 공용 헬퍼(`<ns>:__math/dmul`, `__math/ddiv`)를 호출합니다. 곱셈은 피연산자를 16비트씩 나눠 계산하고, 나눗셈은 16단계 긴 나눗셈을 합니다. 곱셈은 내림, 나눗셈은 C#처럼 0 방향 버림이며 둘 다 정확합니다. 결과가 범위를 넘는 나눗셈은 ±2147483647/65536으로 포화됩니다. 정수 상수로 곱하거나 나누면 스코어보드 연산 한 번으로 끝납니다.
+- 헬퍼와 테이블은 실제로 쓸 때만 생성됩니다.
+
+## ItemLib
+
+```csharp
+use ItemLib;
+use PlayerLib;
+
+static Item wand = new Item("carrot_on_a_stick") { Name = "Magic Wand", Lore = "Right-click me\nfor sparks", Glint = true };
+
+[OnFirstJoin] static void Kit(Player p) { m.GiveObject(wand.Clone(), p); }   // 플레이어마다 복사본 지급
+[OnRightClickObject(nameof(wand))] static void Zap(Player p) { p.SendMessage("Zap!"); }
+```
+
+| 멤버 | 설명 |
+|---|---|
+| `new Item(id)` | 아이템 오브젝트. 속성(컴파일 타임 상수): `Name`, `Lore`(`\n` = 줄바꿈), `Unbreakable`, `Glint` |
+| `m.GiveObject(item, players, count = 1)` | `/give` — 오브젝트를 **소비**합니다 ([오브젝트](language.md#오브젝트-한-번만-사용) 참고) |
+| `item.Clone()` | 내용과 **정체성(id)이 같은** 새 오브젝트 |
+| `item.Dispose()` | 오브젝트 폐기 |
+| `[OnRightClickObject(nameof(field))]` | 이벤트: 이 아이템(또는 그 복사본)을 들고 우클릭 |
+
+- **정체성:** 아이템 오브젝트마다 custom data `mcs_obj:"<ns>:<필드>"`가 들어갑니다. 복사본도 같은 값이라 `[OnRightClickObject]`는 모든 복사본에 반응합니다.
+- **버전:** 1.20.1–1.20.4는 NBT(`{display:{Name:…}}`), 1.20.5+는 아이템 컴포넌트, 1.21.5+는 텍스트 컴포넌트를 SNBT로 씁니다. 감지는 1.20.5 이전 `nbt={SelectedItem:…}`, 이후 `execute if items`입니다.
+- **우클릭**은 기본 아이템이 `carrot_on_a_stick`이나 `warped_fungus_on_a_stick`이어야 합니다 (다른 아이템은 컴파일 에러). 사용된 아이템은 게임처럼, 주 손이 그 아이템 종류면 주 손, 아니면 보조 손입니다.
+- 정적 아이템은 load마다 새로 만들어집니다 (`m.GiveObject(wand, …)`는 load당 한 번). 지역 아이템은 선언문이 실행될 때마다 만들어집니다.
+
+---
+
+## GuiLib
+
+```csharp
+use GuiLib;
+use PlayerLib;
+
+static Board stats = new Board("stats", "Stats");      // objective <ns>.board.stats
+static BossBar timer = new BossBar("timer", "Time");   // 보스바 <ns>:timer
+
+public static void Main()
+{
+    stats.Set("Kills", 0);
+    stats.Show();                                       // 사이드바
+    Gui.SetDisplay(DisplaySlot.BelowName, "my.objective");
+
+    timer.Max = 60;
+    timer.Color = BarColor.Red;
+    timer.Show(Player.All);
+    for (int t = 60; t > 0; t--)
+    {
+        timer.Value = t;
+        timer.Title = $"Time: {t}";
+        Wait(20);
+    }
+    timer.Hide();
+}
+```
+
+### `Gui`
+
+| 메서드 | 명령어 |
+|---|---|
+| `Gui.SetDisplay(DisplaySlot slot, string objective)` | `scoreboard objectives setdisplay <slot> <objective>` (아무 objective나 가능. 예: `[Score]` 필드의 `<ns>.<필드>`) |
+| `Gui.SetDisplay(DisplaySlot slot, Board board)` | 보드를 슬롯에 표시 |
+| `Gui.ClearDisplay(DisplaySlot slot)` | 슬롯 비우기 |
+
+`DisplaySlot`: `Sidebar`, `List`(탭 목록), `BelowName`(1.20.1에서는 `belowName`, 1.20.2 이상에서는 `below_name`으로 출력).
+
+### `Board`
+
+자체 dummy objective `<ns>.board.<id>`를 가진 스코어보드 표시판이며 load 시 생성됩니다. id가 같으면 같은 보드이므로 어느 메서드에서든 `new Board("stats")`로 같은 보드를 가리킵니다. `static` 필드로 둬도 됩니다.
+
+| 멤버 | 설명 |
+|---|---|
+| `new Board(id, title = id)` | `id`: 소문자, 숫자, `_ . -`. `title`: 문자열 상수 |
+| `Title = "..."` | 표시 이름 변경 |
+| `Show(slot = Sidebar)` / `Hide(slot = Sidebar)` | 슬롯에 표시 / 슬롯 비우기 |
+| `Set(string line, int value)` | 사이드바 줄 설정 (공백 없는 가짜 플레이어 이름). 값은 런타임 값도 가능 |
+| `Set(Player players, int value)` | 플레이어 점수 설정 (`List` / `BelowName`에 표시되는 값) |
+| `Get(string line)` | 줄의 값 읽기 |
+| `Remove(string line)` / `Clear()` | 줄 하나 / 모든 줄 삭제 |
+
+### `BossBar`
+
+보스바 `<ns>:<id>`이며 load 시 생성됩니다 (제목은 load마다 갱신). id가 같으면 같은 보스바입니다.
+
+| 멤버 | 설명 |
+|---|---|
+| `new BossBar(id, title = id)` | `title`: 문자열 상수 |
+| `Value`, `Max` | 읽기/쓰기. 런타임 값은 `execute store result bossbar`로 기록 |
+| `Title = ...` | 텍스트. 보간 값(`$"Time: {t}"`)은 설정하는 시점의 값으로 채워짐 |
+| `Color = BarColor.Red` | `Blue Green Pink Purple Red White Yellow` |
+| `Style = BarStyle.Notched10` | `Progress Notched6 Notched10 Notched12 Notched20` |
+| `Visible = ...` | 상수 또는 런타임 `bool` |
+| `Show(Player players)` / `Hide()` | 보이는 플레이어 지정 / 모두에게서 숨김 |
+| `Remove()` | 보스바 삭제 (다음 `/reload`에서 다시 생성) |
 
 ---
 

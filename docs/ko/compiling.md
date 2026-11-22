@@ -191,12 +191,57 @@ dotnet bin/Release/net8.0/mcs.dll ../../examples/hello.mcs -o ../../out/hello
 | 파일 | 역할 |
 |---|---|
 | `Versions.cs` | 버전 표와 버전별 기능. **버전 분기는 전부 여기서 결정됩니다.** |
-| `Preprocessor.cs` | MC# 전용 문법(`use`, `new T : K x;`, `asm`)을 C#으로 변환 |
+| `Preprocessor.cs` | MC# 전용 문법(`use`, `new T : K x;`, `asm`, 최상위 `asm` / `m.Mount`)을 C#으로 변환 |
 | `Prelude.cs` | 내장 라이브러리의 C# 선언 ([라이브러리 레퍼런스](libraries.md) 참고) |
 | `Codegen.cs` | 구문 트리 → mcfunction (언어 핵심) |
 | `Codegen.Libs.cs` | BlockLib / PlayerLib / TuiLib / SpawnEntity / SetWorldSpawn |
+| `Codegen.Math.cs` | `double`(Q15.16) 곱셈/나눗셈 헬퍼, C# 정수 나눗셈 헬퍼, MathLib (sin/cos/tan 룩업 테이블) |
+| `Codegen.Gui.cs` | GuiLib (표시 슬롯, `Board`, `BossBar`) |
+| `Codegen.Array.cs` | 쓰기 가능한 배열 (원소 스코어, 런타임 인덱스 탐색 트리) |
+| `Codegen.Objects.cs` | ItemLib, 오브젝트 한 번만 사용 규칙 (`Clone`, `Dispose`, 실행 시간 검사) |
+| `Codegen.Events.cs` | 플레이어 이벤트 (`[OnJoin]`, `[OnDeath]`, …) |
+| `Codegen.Mount.cs`, `Mount.cs` | `m.Mount` 연결, 스코어보드 클래스 (`class X : dummy`, 필드 자동 선언) |
 | `McData.cs`, `Data/mcdata.json` | 버전별 블록·아이템·엔티티·효과 데이터, 블록 클래스 생성 |
 | `Datapack.cs` | 분기 병합, 오버레이, pack.mcmeta, 파일 출력 |
 | `Program.cs` | CLI, `mcs.json` |
+| `tools/mcsim.py`, `tests/run.py` | 시뮬레이터와 테스트 러너 (9절) |
+| `editors/vscode/` | VS Code 확장 (10절) |
 
 새 마인크래프트 버전을 지원하려면 `Versions.Releases`에 한 줄을 추가하세요. 새 버전에서 동작이 바뀌었다면 `TargetProfile`에 속성을 추가하면 됩니다.
+
+## 9. 테스트와 시뮬레이터
+
+```sh
+python3 tests/run.py              # 전체 실행 (컴파일러를 먼저 빌드)
+python3 tests/run.py arrays wait  # 이름에 "arrays"나 "wait"가 들어간 케이스만
+python3 tests/run.py -u           # 기대 출력 다시 쓰기 — 그 뒤 git diff로 꼭 확인
+```
+
+| 폴더 | 검사 내용 |
+|---|---|
+| `tests/cases/*.mcs` | 전체 버전 범위로 컴파일한 뒤, 빌드가 만든 **모든 버전 레이어에서 시뮬레이터로 실행**합니다. 출력이 `<이름>.out`과 같아야 합니다. 레이어마다 동작이 다르면(예: `belowName` / `below_name`) `.out` 파일에 레이어별 `=== format N ===` 구역이 생깁니다. |
+| `tests/errors/*.mcs` | 컴파일이 실패해야 하고, 모든 `// @error <텍스트>` 줄이 에러에 나와야 합니다. |
+| `examples/*.mcs` | 컴파일되어야 합니다. |
+
+케이스 안의 지시문: `// @mc 1.20.2-26.3`(버전 범위), `// @ticks 100`(시뮬레이션 길이. 기본은 예약된 작업이 없을 때까지, `[Tick]` 메서드가 있으면 20틱), `// @do 5 die Steve`(플레이어 행동 스크립트, 여러 줄 가능 — 아래 참고).
+
+**시뮬레이터**(`tools/mcsim.py`)는 빌드된 데이터팩을 마인크래프트 없이 실행합니다:
+
+```sh
+python3 tools/mcsim.py out/hello               # 가장 최신 버전 레이어
+python3 tools/mcsim.py out/hello --format 15   # 1.20.1 기준
+python3 tools/mcsim.py out/hello --ticks 100
+```
+
+- **시뮬레이션하는 것:** 스코어보드(32비트 오버플로, 내림 나눗셈), data storage와 함수 매크로, `function` / `schedule` / `#tick` / `#load`, `execute`(`if`/`unless score|entity|data`, `as`, `store …`), `tellraw` / `say`, 간단한 엔티티 모델(`summon`, `tag`, `kill`, `type=` `tag=` `name=` `scores=` `limit=` 셀렉터), 스크립트로 넣는 플레이어. `maxCommandChainLength`도 적용해서 무한 루프가 드러납니다.
+- **하지 않는 것:** 블록, 위치, 엔티티 NBT (플레이어는 스크립트로 넣을 때만 존재). 이런 명령어는 `> <명령어>`로 출력되어 실행 기록 역할을 합니다. 마인크래프트가 거부할 명령어는 `! <오류>`로 출력됩니다.
+- 틱 순서는 게임과 같습니다: `#tick` 함수 먼저, 그다음 예약된 함수.
+- **플레이어 스크립트** (`--do "틱 행동"` 또는 테스트의 `// @do`, 0틱 = load 전): `join 이름`, `leave 이름`, `die 이름`, `respawn 이름`, `kill 이름`(그 플레이어가 무언가를 처치), `use 이름 아이템`, `stat 이름 criterion [N]`, `trigger 이름 objective [set|add N]`, `click 이름`(들고 있는 아이템으로 우클릭), `hold 이름 슬롯`, `offhand 이름 슬롯`. 플레이어는 인벤토리가 있습니다 (`/give`로 채워지고 `if items`, `nbt={SelectedItem:…}`로 읽힘). 통계는 해당 criterion의 모든 objective에 반영되고, `/trigger`는 `enable`이 필요하며, `@e`는 죽은 플레이어를 고르지 않고, 특정 플레이어에게 보낸 메시지는 `to Steve: …`로 출력됩니다.
+
+## 10. 에디터 지원 (VS Code)
+
+```sh
+python3 editors/vscode/install.py              # .vsix를 만들고 `code`로 설치
+```
+
+C# + MC# 문법 강조(`asm` 내용은 mcfunction으로), 스니펫, `mcs.json` 검증, 빌드 작업용 `$mcs` 문제 매처를 제공합니다. [editors/vscode](../../editors/vscode/README.md) 참고.

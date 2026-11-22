@@ -59,6 +59,39 @@ var me = Entities.Self<Nation>();                                    // @s
 - **중첩:** 반복 변수, `this`, 매개변수는 중첩된 반복이나 람다 안에서도 그대로 유효합니다. 필요할 때 컴파일러가 엔티티에 태그를 붙입니다.
 - **조회 결과:** `Nearest`, `Random`, `First`, `Spawn`의 결과는 태그로 붙잡아 두므로, 실행 위치나 대상이 바뀌어도 계속 유효합니다.
 
+## 배열
+
+`int[]`, `bool[]`, `float[]`, `double[]`는 쓰기 가능한 배열이며 정적 필드나 지역 변수로 쓸 수 있습니다. 길이는 컴파일 타임에 정해집니다.
+
+```csharp
+static int[] grid = new int[20];          // 0으로 채움
+static int[] primes = { 2, 3, 5, 7 };
+
+public static void Main()
+{
+    for (int i = 0; i < grid.Length; i++) grid[i] = i * i;
+    grid[k] += 100;
+    grid[k]++;
+
+    int[] a = { 1, 2, 3 };                // 지역 배열: 원소에 런타임 값 가능
+    int[] b = a;                          // 같은 배열 (C#처럼 참조)
+    b[0] = 9;                             // a[0]도 9
+
+    foreach (int p in primes) { if (p > 5) break; total += p; }
+    m.Console.WriteLine($"{a} {string.Join("-", primes)}");   // [9, 2, 3] 2-3-5-7
+}
+```
+
+- **저장 방식:** 원소 하나가 스코어 하나(`$static.grid[3]`, `$main.a[0]`)라서 `/scoreboard players get`으로 바로 볼 수 있습니다.
+- **상수 인덱스**(`grid[3]` 또는 상수로 계산되는 식): 스코어에 바로 접근하므로 추가 비용이 없습니다. 범위를 벗어나면 컴파일 에러입니다.
+- **런타임 인덱스**(`grid[i]`): `execute if score … matches` 함수의 이진 트리로 찾습니다 (명령어 약 log₂(n)+8개. 매크로가 필요 없어 1.20.1에서도 동작). 범위를 벗어나면 읽기는 `0`, 쓰기는 무시됩니다.
+- **지원:** `a[i]`, `=`, `+= -= *= /= %=`, `++`/`--`, `a.Length`, `foreach`(`break`/`continue` 포함), 출력(`{a}` → `[1, 2, 3]`, `string.Join(sep, a)`).
+- **정적 배열**은 다른 정적 필드처럼 한 번만 초기화되고 `/reload` 후에도 값이 유지됩니다. 원소는 상수여야 합니다. **지역 배열**은 선언문이 실행될 때마다 새로 만들어집니다.
+- **길이:** 컴파일 타임 상수, 최대 16384. 런타임 값 `n`으로 `new int[n]`은 지원하지 않습니다.
+- **배열 변수**는 컴파일 타임에 결정되므로 지역 배열 재대입(`a = b;`, `a = new int[3];`)을 분기 안에서 하면 안 됩니다. 정적 배열 필드는 재대입할 수 없습니다.
+- **매개변수:** 배열 매개변수는 `[Inline]` 메서드에서만 가능합니다 (`[Inline] static int Sum(int[] xs)`). 배열을 반환할 수는 없고, 다차원·가변 배열은 지원하지 않습니다.
+- `static readonly` 배열은 그대로 컴파일 타임 **표**입니다 (아래). 문자열을 포함한 상수 데이터에 쓰세요.
+
 ## 컴파일 시간 코드 (코드 생성기 대체)
 
 ```csharp
@@ -92,6 +125,110 @@ switch (bld)
 - **정수와 열거형:** `switch`는 정수와 열거형에 쓸 수 있고, case 하나마다 `execute if score ... matches` 한 줄이 됩니다.
 - **상수 값:** 상수에 대한 `switch`(예: `[Inline]` 메서드 안)는 맞는 case만 남깁니다.
 - **`break`:** 각 섹션의 마지막 문장으로만 쓸 수 있습니다.
+
+## 나눗셈과 나머지
+
+`/`와 `%`는 C#과 같습니다. 몫은 0 방향으로 버리고, 나머지는 피제수의 부호를 따릅니다.
+
+```csharp
+int a = -7;
+m.Console.WriteLine($"{a / 2} {a % 2}");                          // -3 -1  (C#과 같음)
+m.Console.WriteLine($"{Math.FloorDiv(a, 2)} {Math.FloorMod(a, 2)}"); // -4 1  (use MathLib;)
+```
+
+- 스코어보드의 `/=`, `%=`는 음의 무한대 방향으로 내림하기 때문에 컴파일러가 부호 처리를 덧붙입니다. 상수로 나누면 명령어 4개, 런타임 값으로 나누면 공용 헬퍼(`<ns>:__math/idiv` / `irem`)를 호출합니다.
+- `Math.FloorDiv` / `Math.FloorMod`(MathLib)는 명령어 하나짜리 내림 버전입니다. 값이 음수가 아님을 알고 있는 자주 도는 코드나, 내림이 필요할 때 쓰세요.
+- `float` / `double` 나눗셈도 (고정소수점 마지막 자리에서) 0 방향으로 버리고, `%`도 같은 방식입니다. `float`/`double`의 `(int)x` 변환도 C#처럼 0 방향으로 버립니다.
+- 0으로 나누면 예외를 던질 수 없으므로 값이 바뀌지 않습니다.
+
+## Wait()
+
+`Wait()`는 현재 메서드를 1틱 멈추고, `Wait(n)`은 `n`틱 멈춥니다. 메서드의 나머지 부분은 `/schedule`로 나중에 실행됩니다. **기다리는 건 이 메서드뿐**이고, 호출한 쪽은 바로 계속 진행합니다.
+
+```csharp
+static void Countdown()
+{
+    for (int i = 3; i > 0; i--)
+    {
+        m.Console.WriteLine($"{i}...");
+        Wait(20);                     // 1초
+    }
+    m.Console.WriteLine("Go!");
+}
+
+public static void Main()
+{
+    Countdown();                      // 첫 Wait에서 돌아옴
+    m.Console.WriteLine("2...보다 먼저 출력됨");
+}
+```
+
+- **쓸 수 있는 곳:** 메서드 본문의 문장, 또는 `if`/`else`, `while`, `for`, `do-while` 안 (중첩 깊이 무관). `Wait`마다 메서드가 쪼개져서 그 뒤의 코드가 continuation 함수가 됩니다.
+- **중간 `return`** 은 동작합니다. `Wait()`가 들어 있는 반복문에서는 `break` / `continue`를 쓸 수 없으니 반복 조건이나 플래그를 쓰세요.
+- **쓸 수 없는 곳:** `switch`, `foreach`, 람다, `[Inline]` 메서드, 엔티티 인스턴스 메서드, 값을 반환하는 메서드.
+- **실행 컨텍스트:** 예약된 코드는 월드 스폰에서 서버로 실행되므로 `@s`, `Player.Self`, 상대 좌표(`~ ~ ~`)는 이어지지 않습니다. 엔티티 변수(태그), `static` 필드, 숫자 지역 변수는 이어집니다.
+- **지역 변수 공유:** 지역 변수는 메서드별 스코어라서, 기다리는 중에 같은 메서드를 다시 호출하면 값이 덮어써집니다 (두 실행 모두 새 값으로 이어감).
+
+## 오브젝트: 한 번만 사용
+
+엔티티 오브젝트(`new Entity : Zombie x;`), 블록 오브젝트(`new Block : Stone s;`), 아이템 오브젝트(`new Item(…)`)는 월드의 **하나**를 나타냅니다. 다음 호출은 오브젝트를 **소비**합니다:
+
+| 소비하는 것 | |
+|---|---|
+| `m.SpawnEntityObject(x, pos)` | 엔티티 소환 (소환 뒤에도 `x`의 속성은 바꿀 수 있음 — 이제 그 엔티티를 가리킴) |
+| `m.SetBlockObject(s, pos)`, `m.FillBlockObject(s, a, b)` | 블록 설치 |
+| `m.GiveObject(item, players)` | 아이템 지급 |
+| `x.Dispose()` | 오브젝트 폐기 — 이후 `x`를 쓰면 에러 |
+
+```csharp
+new Entity : Pig pig;
+m.SpawnEntityObject(pig, here);
+m.SpawnEntityObject(pig, there);           // 에러: 'pig' was already used (line 2)
+m.SpawnEntityObject(pig.Clone(), there);   // OK: 종류와 속성이 같은 새 오브젝트
+
+if (ok) m.GiveObject(wand, p); else wand.Dispose();   // OK: 분기마다 한 번
+```
+
+- **컴파일 타임:** 같은 메서드 안에서 두 번째 소비는 에러입니다. `if`/`else`, `switch` 분기는 따로 검사합니다.
+- **실행 시간:** 한 번의 소비가 여러 번 실행될 수 있는 곳 — 오브젝트를 만들지 않는 반복문 안, 또는 여러 메서드에서 쓰는 정적 오브젝트 — 에서는 플래그 스코어로 첫 실행만 통과시킵니다. 이후 시도는 아무것도 하지 않고 `[MC#] 'x' was already used …`를 출력합니다. 직선 코드에는 플래그도, 추가 명령어도 없습니다.
+- **`Clone()`** 은 새 오브젝트를 만듭니다: 엔티티는 종류와 소환 전 속성, 블록은 상태, 아이템은 내용과 정체성을 유지합니다.
+- 임시 오브젝트로 한 번만 쓰려면 `new …`나 `x.Clone()`을 바로 넘기면 됩니다.
+
+## 플레이어 이벤트
+
+정적 메서드에 이벤트 속성을 붙이면, 이벤트가 일어난 플레이어마다 **그 플레이어로, 그 플레이어 위치에서**(`@s`) 실행됩니다.
+
+```csharp
+use PlayerLib;
+
+[OnFirstJoin] static void Welcome(Player p) { p.Give("minecraft:bread", 5); }
+[OnJoin]      static void Hello(Player p)   { p.SendMessage("Welcome back!"); }
+[OnDeath]     static void Died()            { deaths++; }
+[OnRespawn]   static void Back(Player p)    { p.Effect("minecraft:regeneration", 5); }
+[OnKill]      static void Kills(Player p, int count) { p.SendMessage($"+{count} kills"); }
+[OnRightClick("carrot_on_a_stick")] static void Wand(Player p) { asm summon minecraft:lightning_bolt; }
+[OnTrigger("menu")] static void Menu(Player p, int choice) { /* /trigger menu set 2 */ }
+[OnStat("minecraft.custom:minecraft.jump")] static void Jumped(int times) { }
+```
+
+| 속성 | 시점 | `int` 매개변수 |
+|---|---|---|
+| `[OnJoin]` | 플레이어 접속 (처음 포함 매번) | — |
+| `[OnFirstJoin]` | 플레이어 첫 접속 | — |
+| `[OnDeath]` | 플레이어 사망 (사망 위치에서, 사망 화면 상태로 실행) | 사망 횟수 |
+| `[OnRespawn]` | 사망 후 부활 | — |
+| `[OnKill]` | 몹이나 플레이어를 처치 | 처치 수 |
+| `[OnRightClick(item)]` | 아이템 사용 (기본 `carrot_on_a_stick`) | 사용 횟수 |
+| `[OnTrigger("name")]` | `/trigger name` 실행 — **OP 권한 불필요** | 값 (그냥 `/trigger`면 `1`) |
+| `[OnStat("criterion")]` | 누적 통계 증가. 예: `minecraft.mined:minecraft.stone` | 증가량 |
+| `[OnRightClickObject(nameof(wand))]` | 이 [아이템 오브젝트](libraries.md#itemlib)(또는 복사본)를 들고 우클릭 | 사용 횟수 |
+
+- **매개변수**는 선택입니다: `Player`(해당 플레이어)와 `int`. 한 이벤트에 메서드를 여러 개 달 수 있고, 소스 순서대로 실행됩니다.
+- **동작 방식:** 틱 함수 하나(`<ns>:__events/tick`)가 이벤트 objective(`<ns>.ev.*`, load 시 생성)를 확인해 `execute as @a[scores={…=1..}] at @s`로 핸들러를 실행하고 카운터를 초기화합니다. 이벤트는 같은 틱 안에 감지됩니다.
+- **우클릭** 감지는 `carrot_on_a_stick`, `warped_fungus_on_a_stick`에서만 됩니다. 다른 아이템은 실제로 사용될 때(먹기, 던지기, 설치 등) 셉니다. 아이템 ID는 버전별로 검사합니다.
+- **접속:** 데이터팩을 처음 설치할 때 접속해 있던 플레이어도 첫 접속으로 칩니다. "나감" 이벤트는 없습니다 (나간 플레이어로는 아무것도 실행할 수 없음).
+- **부활**은 `@e`가 살아 있는 엔티티만 고른다는 점을 이용하므로 `doImmediateRespawn`에서도 동작합니다.
+- **트리거:** 매 틱 모든 플레이어에게 다시 허용됩니다. objective 이름이 플레이어가 입력하는 이름이므로 겹치지 않게 정하세요.
 
 ## 실행 중 값이 들어가는 명령어
 
