@@ -1,0 +1,59 @@
+use EntityLib;
+
+static int counter = 0;
+
+public static int Fib(int n) {
+    int a = 0, b = 1;
+    for (int i = 0; i < n; i++) {
+        int t = a + b;
+        a = b;
+        b = t;
+    }
+    return a;
+}
+
+public static bool IsEven(int n) => n % 2 == 0;
+
+[Tick]
+public static void OnTick() {
+    counter++;
+    if (counter >= 200) {
+        counter = 0;
+        asm say 10 seconds passed;
+    }
+}
+
+public static void Main() {
+    const string greeting = "MC# Demo";
+    m.Console.WriteLine(greeting);
+
+    int sum = 0;
+    int k = 0;
+    while (true) {
+        k++;
+        if (k > 10) break;
+        if (!IsEven(k)) continue;
+        sum += k;
+    }
+    m.Console.WriteLine($"Even sum 1..10 = {sum}, Fib(10) = {Fib(10)}");
+
+    float speed = 1.5f;
+    speed = speed * 2 + 0.25f;
+    m.Console.WriteLine($"speed = {speed}, big = {sum > 20 && k == 11}");
+
+    int sign = sum > 0 ? 1 : -1;
+    if (sign == 1) m.Console.WriteLine("positive"); else m.Console.WriteLine("non-positive");
+
+    new Entity : Pig p;
+    p.NoAI = true;
+    p.Health = speed;
+    if (m.SpawnEntityObject(p, GetWorldSpawn())) {
+        p.Glowing = true;
+        m.Console.WriteLine($"Spawned {p} with health {p.Health}");
+    }
+
+    asm {
+        say multi-line asm
+        tellraw @a {"text":"json {braces} ok","color":"gold"}
+    }
+}

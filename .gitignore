@@ -1,0 +1,13 @@
+# .NET build output
+bin/
+obj/
+
+# Compiled datapacks
+out/
+
+# Editor / OS
+.vs/
+.vscode/
+.idea/
+*.swp
+.DS_Store

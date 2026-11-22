@@ -1,0 +1,6 @@
+{
+  "namespace": "versions",
+  "sources": ["versions.mcs"],
+  "output": "../out/versions",
+  "minecraft": "1.20.1-26.3"
+}

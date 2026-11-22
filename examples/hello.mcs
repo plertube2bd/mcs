@@ -1,0 +1,9 @@
+use EntityLib;
+
+public static void Main() {
+    new Entity : Zombie x;
+    x.maxHealth = 100f;
+    x.Health = 100f;
+    if (m.SpawnEntityObject(x, GetWorldSpawn())) return;
+    m.Console.WriteLine($"Complete. Entity's UUID : {string.join("", x.uuid)}");
+}

@@ -1,0 +1,70 @@
+use BlockLib;
+use PlayerLib;
+use TuiLib;
+
+static int votes = 0;
+
+public static void Main() {
+    // ---- BlockLib
+    Position origin = GetWorldSpawn().Offset(3, 0, 3);
+    m.SetBlock("minecraft:gold_block", origin);
+    m.FillBlock("stone", origin.Offset(0, 1, 0), origin.Offset(2, 1, 2));
+
+    new Block : OakStairs stairs;
+    stairs.Facing = Facing.East;
+    stairs.Half = Half.Top;
+    m.SetBlockObject(stairs, origin.Offset(0, 2, 0));
+
+    Block glass = new Block("minecraft:glass");
+    m.FillBlockObject(glass, origin.Offset(0, 3, 0), origin.Offset(1, 3, 1));
+
+    if (m.IsBlock("gold_block", origin)) m.Console.WriteLine("gold block placed");
+
+    // ---- SpawnEntity (id, position, count)
+    SpawnEntity("minecraft:chicken", origin.Offset(0, 5, 0), 3);
+    SpawnEntity("cow", origin.Offset(0, 5, 0), 12);
+
+    // ---- TuiLib
+    Button yes = new Button("[Yes]", OnYes) { Color = Color.Green, Hover = "Vote yes" };
+    Button no = new Button("[No]", OnNo);
+    no.Color = Color.Red;
+    Tui.Menu(Player.All, new Text("Do you like MC#?") { Bold = true, Color = Color.Gold }, yes, no);
+    Tui.Print("Votes so far: ", votes);
+
+    // ---- PlayerLib
+    Player everyone = Player.All;
+    everyone.Give("minecraft:diamond", 3);
+    everyone.SetSlot(0, "minecraft:diamond_sword");
+    everyone.SetSlot(Slot.Head, "minecraft:iron_helmet");
+    everyone.SwapSlots(0, 8);
+    everyone.Effect("speed", 30, 1);
+    everyone.Run(Greet);
+
+    // ---- SetWorldSpawn (moves the GetWorldSpawn() marker, no /reload needed)
+    SetWorldSpawn(new Position(8, -60, 8));
+}
+
+public static void OnYes(Player p) {
+    votes++;
+    p.SendMessage($"Thanks! votes = {votes}");
+    p.Title("Voted!", "yes");
+}
+
+public static void OnNo() {
+    Player.Self.ActionBar("Maybe next time");
+}
+
+public static void Greet(Player p) {
+    p.SendMessage($"Hello, {p}! You have {p.CountItem("diamond")} diamonds, slot 0 empty: {p.IsSlotEmpty(0)}");
+    if (p.Level < 5) p.Level = 5;
+}
+
+#if MC_1_20_2_OR_GREATER
+// Runtime values (macros, 1.20.2+)
+public static void Reward(Player p, int amount, int slot) {
+    p.Give("minecraft:emerald", amount);
+    p.SetSlot(slot, "minecraft:apple", amount);
+    p.Effect("minecraft:regeneration", amount * 2, 1);
+    p.AddLevels(amount);
+}
+#endif

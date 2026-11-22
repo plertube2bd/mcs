@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# MC# compiler launcher: ./mcs examples/hello.mcs -o out/hello
+DIR="$(cd "$(dirname "$0")" && pwd)"
+export PATH="$HOME/.dotnet:$PATH" DOTNET_CLI_TELEMETRY_OPTOUT=1
+DLL="$DIR/src/Mcs.Compiler/bin/Release/net8.0/mcs.dll"
+[ -f "$DLL" ] || dotnet build "$DIR/src/Mcs.Compiler" -c Release -v q >&2 || exit 1
+exec dotnet "$DLL" "$@"
