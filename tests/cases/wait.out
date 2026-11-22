@@ -1,0 +1,14 @@
+[t0] A
+[t0] main continues right away
+[t0] loop i=0 j=0
+[t1] B
+[t1] loop i=0 j=1
+[t1] loop i=1 j=0
+[t2] loop i=1 j=1
+[t2] loop i=2 j=0
+[t3] loop i=2 j=1
+[t6] C then
+[t7] D then
+[t7] E after if x=3
+[t23] loops done k=2
+[t40] return at n=3

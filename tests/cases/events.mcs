@@ -1,0 +1,28 @@
+// Player events, driven by scripted players.
+// @do 0 join Steve
+// @do 2 join Alex
+// @do 3 use Steve carrot_on_a_stick
+// @do 4 kill Alex
+// @do 4 kill Alex
+// @do 5 die Steve
+// @do 7 respawn Steve
+// @do 8 trigger Alex menu set 3
+// @do 9 trigger Alex menu
+// @do 10 stat Steve minecraft.custom:minecraft.jump 2
+// @do 11 leave Alex
+// @do 13 join Alex
+// @do 14 trigger Steve nope
+use PlayerLib;
+
+static int deaths = 0;
+
+[OnFirstJoin] static void Welcome(Player p) { p.SendMessage("Welcome for the first time!"); }
+[OnJoin] static void Hello(Player p) { p.SendMessage("Hello again"); }
+[OnRightClick("carrot_on_a_stick")] static void Wand(Player p) { p.SendMessage("Zap!"); }
+[OnKill] static void Kills(Player p, int count) { p.SendMessage($"killed {count}"); }
+[OnDeath] static void Died() { deaths++; m.Console.WriteLine($"deaths={deaths}"); }
+[OnRespawn] static void Back(Player p) { p.SendMessage("You're back"); }
+[OnTrigger("menu")] static void Menu(Player p, int choice) { p.SendMessage($"menu choice {choice}"); }
+[OnStat("minecraft.custom:minecraft.jump")] static void Jump(int n) { m.Console.WriteLine($"jumped {n}"); }
+
+public static void Main() { m.Console.WriteLine("loaded"); }

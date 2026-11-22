@@ -1,0 +1,6 @@
+// Runtime table indexes need macros, which 1.20.1 does not have.
+static readonly int[] Cost = { 0, 20, 15 };
+static int pick = 2;
+public static void Main() { m.Console.WriteLine($"{Cost[pick]}"); }
+// @error Runtime values here need function macros (1.20.2+)
+// @error [1.20.1]

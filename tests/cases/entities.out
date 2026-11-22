@@ -1,0 +1,8 @@
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["t.cell","mcs.entities.r0"]}
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["t.cell","mcs.entities.r0"]}
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["t.cell","mcs.entities.r0"]}
+[t0] cells=3 total=33 any=True
+[t0] > kill @s
+[t0] > kill @s
+[t0] > kill @s
+[t0] after kill: 0

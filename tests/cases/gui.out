@@ -1,0 +1,57 @@
+=== format 15 ===
+[t0] > scoreboard objectives modify gui.board.stats displayname "Stats"
+[t0] > bossbar add gui:timer "Time left"
+[t0] > bossbar set gui:timer name "Time left"
+[t0] > scoreboard objectives setdisplay sidebar gui.board.stats
+[t0] > scoreboard objectives setdisplay belowName gui.board.stats
+[t0] kills line = 4
+[t0] > bossbar set gui:timer max 60
+[t0] > bossbar set gui:timer color red
+[t0] > bossbar set gui:timer style notched_10
+[t0] > bossbar set gui:timer players @a
+[t0] > bossbar set gui:timer value 2  (stored)
+[t0] > bossbar set gui:timer name ["",{"text":"Time left: "},{"score":{"name":"$main.t","objective":"mcs.gui"}}]
+[t20] > bossbar set gui:timer value 1  (stored)
+[t20] > bossbar set gui:timer name ["",{"text":"Time left: "},{"score":{"name":"$main.t","objective":"mcs.gui"}}]
+[t40] > bossbar set gui:timer value 0  (stored)
+[t40] bar value = 0
+[t40] > bossbar set gui:timer players
+[t40] > scoreboard objectives setdisplay sidebar
+=== format 18 ===
+[t0] > scoreboard objectives modify gui.board.stats displayname "Stats"
+[t0] > bossbar add gui:timer "Time left"
+[t0] > bossbar set gui:timer name "Time left"
+[t0] > scoreboard objectives setdisplay sidebar gui.board.stats
+[t0] > scoreboard objectives setdisplay below_name gui.board.stats
+[t0] kills line = 4
+[t0] > bossbar set gui:timer max 60
+[t0] > bossbar set gui:timer color red
+[t0] > bossbar set gui:timer style notched_10
+[t0] > bossbar set gui:timer players @a
+[t0] > bossbar set gui:timer value 2  (stored)
+[t0] > bossbar set gui:timer name ["",{"text":"Time left: "},{"score":{"name":"$main.t","objective":"mcs.gui"}}]
+[t20] > bossbar set gui:timer value 1  (stored)
+[t20] > bossbar set gui:timer name ["",{"text":"Time left: "},{"score":{"name":"$main.t","objective":"mcs.gui"}}]
+[t40] > bossbar set gui:timer value 0  (stored)
+[t40] bar value = 0
+[t40] > bossbar set gui:timer players
+[t40] > scoreboard objectives setdisplay sidebar
+=== format 48 ===
+[t0] > scoreboard objectives modify gui.board.stats displayname "Stats"
+[t0] > bossbar add gui:timer "Time left"
+[t0] > bossbar set gui:timer name "Time left"
+[t0] > scoreboard objectives setdisplay sidebar gui.board.stats
+[t0] > scoreboard objectives setdisplay below_name gui.board.stats
+[t0] kills line = 4
+[t0] > bossbar set gui:timer max 60
+[t0] > bossbar set gui:timer color red
+[t0] > bossbar set gui:timer style notched_10
+[t0] > bossbar set gui:timer players @a
+[t0] > bossbar set gui:timer value 2  (stored)
+[t0] > bossbar set gui:timer name ["",{"text":"Time left: "},{"score":{"name":"$main.t","objective":"mcs.gui"}}]
+[t20] > bossbar set gui:timer value 1  (stored)
+[t20] > bossbar set gui:timer name ["",{"text":"Time left: "},{"score":{"name":"$main.t","objective":"mcs.gui"}}]
+[t40] > bossbar set gui:timer value 0  (stored)
+[t40] bar value = 0
+[t40] > bossbar set gui:timer players
+[t40] > scoreboard objectives setdisplay sidebar

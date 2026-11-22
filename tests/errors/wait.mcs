@@ -1,0 +1,7 @@
+static int R() { Wait(); return 1; }
+static void S(int v) { switch (v) { case 1: Wait(); break; } }
+static void B() { while (true) { Wait(); break; } }
+public static void Main() { }
+// @error Methods that use Wait() must return void
+// @error Wait() cannot be used inside switch.
+// @error break cannot be used in a loop that contains Wait().

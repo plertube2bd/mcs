@@ -1,0 +1,8 @@
+static int a;
+static int b;
+m.Mount(a, "nodot");
+m.Mount(b, "x", "has space");
+public static void Main() { int loc = 0; m.Mount(loc, "x.y"); }
+// @error Expected "objective.holder"
+// @error Invalid score holder 'has space'
+// @error Mount needs a static int or bool field

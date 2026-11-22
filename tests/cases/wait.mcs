@@ -1,0 +1,37 @@
+// Wait(): the rest of the method runs later; the caller continues right away.
+static int stop = 2;
+public static void Main() {
+    Steps();
+    m.Console.WriteLine("main continues right away");
+    Loop();
+    Ret();
+}
+static void Steps() {
+    m.Console.WriteLine("A");
+    Wait();
+    m.Console.WriteLine("B");
+    Wait(5);
+    int x = 3;
+    if (x > 2) { m.Console.WriteLine("C then"); Wait(); m.Console.WriteLine("D then"); }
+    else m.Console.WriteLine("C else");
+    m.Console.WriteLine($"E after if x={x}");
+}
+static void Loop() {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 2; j++) {
+            m.Console.WriteLine($"loop i={i} j={j}");
+            if (j == 0) Wait();
+        }
+    }
+    int k = 0;
+    do { k++; Wait(10); } while (k < 2);
+    m.Console.WriteLine($"loops done k={k}");
+}
+static void Ret() {
+    int n = 0;
+    while (true) {
+        n++;
+        if (n > stop) { m.Console.WriteLine($"return at n={n}"); return; }
+        Wait(20);
+    }
+}

@@ -1,0 +1,45 @@
+// Core control flow and statics.
+static int counter = 5;          // kept across reloads: only set when unset
+
+[Inline] static int Twice(int x) => x * 2;
+
+static int Fib(int n) {
+    int a = 0, b = 1;
+    for (int i = 0; i < n; i++) { int t = a + b; a = b; b = t; }
+    return a;
+}
+
+static int Sign(int x) {
+    if (x > 0) return 1;
+    if (x < 0) return -1;
+    return 0;
+}
+
+static bool calls = false;
+static bool Touch() { calls = true; return true; }
+
+public static void Main() {
+    counter++;
+    m.Console.WriteLine($"counter={counter} fib(10)={Fib(10)} twice={Twice(counter)}");
+    m.Console.WriteLine($"sign: {Sign(-4)} {Sign(0)} {Sign(9)}");
+
+    int sum = 0, n = 0;
+    while (true) {
+        n++;
+        if (n % 2 == 0) continue;
+        if (n > 9) break;
+        sum += n;
+    }
+    m.Console.WriteLine($"odd sum={sum} n={n}");
+
+    int k = 0;
+    do { k += 3; } while (k < 10);
+    switch (k) {
+        case 12: m.Console.WriteLine("k is 12"); break;
+        default: m.Console.WriteLine("k is something else"); break;
+    }
+
+    bool f = n < 0 && Touch();
+    m.Console.WriteLine($"short-circuit: f={f} calls={calls} max={(sum > k ? sum : k)}");
+    foreach (int i in Unroll.Range(0, 3)) m.Console.WriteLine($"unrolled {i}");
+}

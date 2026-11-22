@@ -1,0 +1,14 @@
+use PlayerLib;
+[OnJoin] static void J(int x) { }
+[OnStat("health")] static void H() { }
+[OnRightClick("not_an_item")] static void R() { }
+[OnDeath] static int D() => 1;
+[OnTrigger("bad name")] static void T() { }
+[OnKill] static void K(int a, int b) { }
+public static void Main() { }
+// @error [OnJoin] has no value: remove the int parameter.
+// @error 'health' is not a counter statistic
+// @error Unknown item ID 'not_an_item'
+// @error [OnDeath] methods must be static and return void.
+// @error Invalid trigger objective name 'bad name'.
+// @error [OnKill] methods can take a Player and an int

@@ -1,0 +1,3 @@
+[t0] ! An objective already exists by the name test  ← scoreboard objectives add test dummy
+[t0] hello=5
+[t0] hello=30 test.hello=30 world=7 kills=1 flag=True

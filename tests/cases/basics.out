@@ -1,0 +1,8 @@
+[t0] counter=6 fib(10)=55 twice=12
+[t0] sign: -1 0 1
+[t0] odd sum=25 n=11
+[t0] k is 12
+[t0] short-circuit: f=False calls=False max=25
+[t0] unrolled 0
+[t0] unrolled 1
+[t0] unrolled 2

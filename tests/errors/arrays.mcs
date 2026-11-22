@@ -1,0 +1,17 @@
+static int[] noinit;
+static int[] tbl = new int[3];
+static int F(int[] xs) => 0;
+public static void Main() {
+    int n = 3;
+    int[] r = new int[n];
+    tbl = new int[3];
+    int[] s = new int[2];
+    int v = s[5];
+    string[] names = { "a" };
+}
+// @error Static arrays need a size or elements
+// @error Array parameters (xs) are only supported in [Inline] methods
+// @error The array length must be a compile-time constant.
+// @error Static array fields cannot be reassigned
+// @error Index 5 is out of range (length 2).
+// @error Unsupported array type: string[]

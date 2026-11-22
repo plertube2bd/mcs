@@ -1,0 +1,14 @@
+// [Tick] runs every tick; schedule and Wait interleave with it.
+// @ticks 5
+static int ticks = 0;
+
+[Tick] public static void OnTick() {
+    ticks++;
+    if (ticks % 2 == 0) m.Console.WriteLine($"tick {ticks}");
+}
+
+public static void Main() {
+    m.Console.WriteLine("start");
+    Wait(3);
+    m.Console.WriteLine($"after 3 ticks, ticks={ticks}");
+}

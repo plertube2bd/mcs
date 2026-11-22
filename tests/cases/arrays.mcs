@@ -1,0 +1,46 @@
+// Writable arrays: constant and runtime indexes, references, foreach, printing.
+static int[] grid = new int[20];
+static int[] primes = { 2, 3, 5, 7, 11 };
+static double[] ws = { 0.5, 1.25, -2 };
+static readonly int[] Cost = { 0, 20, 15 };      // compile-time table
+
+[Inline] static int Sum(int[] xs) {
+    int s = 0;
+    foreach (int x in xs) s += x;
+    return s;
+}
+
+public static void Main() {
+    for (int i = 0; i < grid.Length; i++) grid[i] = i * i;
+    int k = 7;
+    grid[k] += 100;
+    grid[k]++;
+    int old = grid[3]++;
+    grid[0] = primes[4] * 2;
+    m.Console.WriteLine($"grid[7]={grid[k]} old={old} grid[3]={grid[3]} grid[0]={grid[0]} grid[19]={grid[19]}");
+
+    int[] a = new int[5];
+    int[] b = a;
+    b[2] = 42;
+    int[] c = { k, k + 1, k * 3 };
+    m.Console.WriteLine($"a={a} c={string.Join("-", c)} len={c.Length}");
+
+    int total = 0;
+    foreach (int p in primes) {
+        if (p == 3) continue;
+        if (p > 7) break;
+        total += p;
+    }
+    m.Console.WriteLine($"total={total} sum={Sum(primes)} sumc={Sum(c)} cost={Cost[2]}");
+
+    bool[] flags = new bool[4];
+    flags[k - 5] = true;
+    float[] fs = { 1.5f, 2.25f };
+    fs[1] *= 2;
+    ws[k - 6] = ws[0] + ws[2];
+    m.Console.WriteLine($"flags={flags} fs={fs} ws={ws}");
+
+    int oob = grid[k * 10];
+    grid[-k] = 5;
+    m.Console.WriteLine($"out of range: read={oob} grid[1]={grid[1]}");
+}

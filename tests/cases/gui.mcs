@@ -1,0 +1,28 @@
+// GuiLib: display slots, boards and boss bars (the below-name slot is spelled differently before 1.20.2).
+use GuiLib;
+use PlayerLib;
+static Board stats = new Board("stats", "Stats");
+static BossBar timer = new BossBar("timer", "Time left");
+static int kills = 4;
+
+public static void Main() {
+    stats.Set("Kills", kills);
+    stats.Set("Deaths", 0);
+    stats.Show();
+    Gui.SetDisplay(DisplaySlot.BelowName, stats);
+    m.Console.WriteLine($"kills line = {stats.Get("Kills")}");
+    stats.Remove("Deaths");
+    timer.Max = 60;
+    timer.Color = BarColor.Red;
+    timer.Style = BarStyle.Notched10;
+    timer.Show(Player.All);
+    for (int t = 2; t > 0; t--) {
+        timer.Value = t;
+        timer.Title = $"Time left: {t}";
+        Wait(20);
+    }
+    timer.Value = timer.Value - 1;
+    m.Console.WriteLine($"bar value = {timer.Value}");
+    timer.Hide();
+    Gui.ClearDisplay(DisplaySlot.Sidebar);
+}

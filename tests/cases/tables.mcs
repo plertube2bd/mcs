@@ -1,0 +1,10 @@
+// static readonly tables with a runtime index use macros (1.20.2+).
+// @mc 1.20.2-26.3
+static readonly int[] Cost = { 0, 20, 15 };
+static readonly string[] Names = { "none", "farm", "mine" };
+static int pick = 2;
+
+public static void Main() {
+    m.Console.WriteLine($"{Names[pick]} costs {Cost[pick]}");
+    asm $"say building {Names[pick]}";
+}

@@ -1,0 +1,5 @@
+[t0] grid[7]=150 old=9 grid[3]=10 grid[0]=22 grid[19]=361
+[t0] a=[0, 0, 42, 0, 0] c=7-8-21 len=3
+[t0] total=14 sum=28 sumc=36 cost=15
+[t0] flags=[False, False, True, False] fs=[1.500, 4.500] ws=[0.50000, -1.50000, -2.00000]
+[t0] out of range: read=0 grid[1]=1

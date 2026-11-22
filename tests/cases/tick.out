@@ -1,0 +1,4 @@
+[t0] start
+[t2] tick 2
+[t3] after 3 ticks, ticks=3
+[t4] tick 4

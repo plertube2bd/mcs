@@ -1,0 +1,14 @@
+// `/` and `%` follow C#: truncate toward zero, remainder has the dividend's sign.
+use MathLib;
+static int a = -7;
+static int b = 2;
+static int z = 0;
+static float fa = -7.5f;
+static double da = -7.5;
+
+public static void Main() {
+    m.Console.WriteLine($"{a / b} {a % b} {a / -2} {a % -2} {-a / 2} {a / 3} {7 / -b} {7 % -b} {a / b * b + a % b}");
+    m.Console.WriteLine($"by zero: {a / z} {a % z}");
+    m.Console.WriteLine($"casts: {(int)fa} {(int)da} rem: {fa % 2} {da % 2} div: {da / 4} {fa / 4}");
+    m.Console.WriteLine($"const: {-7 / 2} {-7 % 2}");
+}

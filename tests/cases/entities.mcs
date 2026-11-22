@@ -1,0 +1,20 @@
+// Entity classes, queries and per-entity scores (simulated: summon / tag / kill / selectors).
+[Entity("minecraft:marker", "t.cell")]
+public partial class Cell : EntityObject
+{
+    public int Value;
+    public void Bump(int by) { Value += by; }
+}
+
+public static void Main() {
+    for (int i = 0; i < 3; i++) {
+        var c = Entities.Spawn<Cell>(Position.Here);
+        c.Value = i * 10;
+    }
+    foreach (var c in Entities.All<Cell>()) c.Bump(1);
+    int total = 0;
+    foreach (var c in Entities.All<Cell>()) total += c.Value;
+    m.Console.WriteLine($"cells={Entities.Count<Cell>()} total={total} any={Entities.Any<Cell>()}");
+    foreach (var c in Entities.All<Cell>()) c.Kill();
+    m.Console.WriteLine($"after kill: {Entities.Count<Cell>()}");
+}

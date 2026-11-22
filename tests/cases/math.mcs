@@ -1,0 +1,13 @@
+// MathLib: lookup-table trig and floor division.
+use MathLib;
+static double deg = 30;
+static double[] angles = { 0, 0.5, 1, -1, 3.14159, 10, 100, 1000 };
+
+public static void Main() {
+    foreach (double t in angles)
+        m.Console.WriteLine($"x={t} sin={Math.Sin(t)} cos={Math.Cos(t)}");
+    m.Console.WriteLine($"tan(1)={Math.Tan(angles[2])} tan(pi/4)={Math.Tan(Math.PI / 4)} const sin(0.5)={Math.Sin(0.5)}");
+    m.Console.WriteLine($"sin(30deg)={Math.Sin(deg * Math.Deg2Rad)} float cos={Math.Cos(1.0f)}");
+    int a = -7;
+    m.Console.WriteLine($"floor: {Math.FloorDiv(a, 2)} {Math.FloorMod(a, 2)}");
+}

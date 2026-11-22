@@ -1,0 +1,45 @@
+// Item objects, [OnRightClickObject], and the single-use rule (Clone / Dispose / runtime guard).
+// @do 0 join Steve
+// @do 2 click Steve
+// slots: 0–2 wands from Main, 3 wand from Kit, 4 plain stick
+// @do 3 hold Steve 4
+// @do 4 click Steve
+// @do 5 offhand Steve 0
+// @do 6 click Steve
+// @do 7 hold Steve 5
+// @do 8 click Steve
+// @do 9 join Alex
+// @do 10 click Alex
+use ItemLib;
+use PlayerLib;
+use BlockLib;
+use EntityLib;
+
+static Item wand = new Item("carrot_on_a_stick") { Name = "Magic Wand", Lore = "Right-click me\nfor sparks", Glint = true };
+static int zaps = 0;
+
+[OnRightClickObject(nameof(wand))]
+static void Zap(Player p) { zaps++; p.SendMessage($"Zap #{zaps}"); }
+
+[OnFirstJoin]
+static void Kit(Player p) {
+    m.GiveObject(wand.Clone(), p);                      // slot 0: a wand (clones share the identity)
+    p.Give("minecraft:carrot_on_a_stick");               // slot 1: a plain stick — must not zap
+}
+
+public static void Main() {
+    m.GiveObject(wand, Player.All);                      // the static object itself: once per load
+    for (int i = 0; i < 2; i++) m.GiveObject(wand.Clone(), Player.All);   // fresh clones: fine
+
+    new Entity : Pig pig;
+    for (int i = 0; i < 3; i++) m.SpawnEntityObject(pig, Position.Here);  // runs 3 times: only the first spawns
+
+    new Entity : Cow cow;
+    if (zaps > 0) m.SpawnEntityObject(cow, Position.Here);
+    else cow.Dispose();                                  // one use per branch is fine
+
+    new Block : Stone s;
+    m.SetBlockObject(s, Position.Here);
+    m.SetBlockObject(s.Clone(), Position.Here.Offset(0, 1, 0));
+    m.Console.WriteLine("main done");
+}

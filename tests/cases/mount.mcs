@@ -1,0 +1,21 @@
+// m.Mount and scoreboard classes.
+asm scoreboard objectives add test dummy
+asm scoreboard players add hello test 5
+
+static int hello;
+m.Mount(hello, "test.hello");
+
+public class test : dummy {}
+m.Mount(test, "test");
+
+public class stats : dummy { public static bool flag; }
+
+public static void Main() {
+    m.Console.WriteLine($"hello={hello}");
+    hello += 10;
+    test.hello = test.hello * 2;
+    test.world = 7;
+    stats.kills++;
+    stats.flag = hello > 20;
+    m.Console.WriteLine($"hello={hello} test.hello={test.hello} world={test.world} kills={stats.kills} flag={stats.flag}");
+}

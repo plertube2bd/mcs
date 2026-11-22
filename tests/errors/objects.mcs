@@ -1,0 +1,26 @@
+use ItemLib;
+use PlayerLib;
+use BlockLib;
+use EntityLib;
+static Item wand = new Item("carrot_on_a_stick");
+static Item apple = new Item("apple");
+[OnRightClickObject(nameof(apple))] static void A(Player p) { }
+[OnRightClickObject("nothing")] static void B(Player p) { }
+public static void Main() {
+    new Entity : Zombie z;
+    m.SpawnEntityObject(z, Position.Here);
+    m.SpawnEntityObject(z, Position.Here);
+    new Block : Stone s;
+    s.Dispose();
+    m.SetBlockObject(s, Position.Here);
+    m.GiveObject(wand, Player.All);
+    if (true) { }
+    m.GiveObject(wand, Player.All);
+    wand = new Item("stick");
+}
+// @error 'z' was already used (line 11)
+// @error 's' was disposed (line 14)
+// @error 'wand' was already used (line 16)
+// @error Right-click detection needs an item object made from carrot_on_a_stick
+// @error No static Item field named 'nothing'
+// @error Static objects cannot be reassigned
