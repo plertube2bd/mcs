@@ -61,6 +61,52 @@ public static class Prelude
             [System.AttributeUsage(System.AttributeTargets.Method)]
             public sealed class TickAttribute : System.Attribute { }
 
+            // ---- Player events. The method runs as the player, at the player (@s). Parameters (all optional):
+            //      a Player (that player) and, for counter events, an int (how much the counter went up).
+
+            /// A player joins the world (every login, including the first).
+            [System.AttributeUsage(System.AttributeTargets.Method)]
+            public sealed class OnJoinAttribute : System.Attribute { }
+
+            /// A player joins for the first time (also players online when the pack is first installed).
+            [System.AttributeUsage(System.AttributeTargets.Method)]
+            public sealed class OnFirstJoinAttribute : System.Attribute { }
+
+            /// A player died (runs at the death position, while the player is on the death screen).
+            [System.AttributeUsage(System.AttributeTargets.Method)]
+            public sealed class OnDeathAttribute : System.Attribute { }
+
+            /// A player respawned after dying.
+            [System.AttributeUsage(System.AttributeTargets.Method)]
+            public sealed class OnRespawnAttribute : System.Attribute { }
+
+            /// A player killed something (mob or player). int parameter: number of kills.
+            [System.AttributeUsage(System.AttributeTargets.Method)]
+            public sealed class OnKillAttribute : System.Attribute { }
+
+            /// A player used an item. Right-click detection works for carrot_on_a_stick and warped_fungus_on_a_stick;
+            /// other items count when they are actually used (eaten, thrown, placed, …).
+            [System.AttributeUsage(System.AttributeTargets.Method)]
+            public sealed class OnRightClickAttribute : System.Attribute { public OnRightClickAttribute(string item = "carrot_on_a_stick") { } }
+
+            /// A player ran /trigger <objective> (no operator permission needed). int parameter: the value (1 for a plain /trigger).
+            [System.AttributeUsage(System.AttributeTargets.Method)]
+            public sealed class OnTriggerAttribute : System.Attribute { public OnTriggerAttribute(string objective) { } }
+
+            /// A player right-clicked while holding this item object (a static Item field):
+            /// [OnRightClickObject(nameof(wand))]. The item must be carrot_on_a_stick or warped_fungus_on_a_stick.
+            [System.AttributeUsage(System.AttributeTargets.Method)]
+            public sealed class OnRightClickObjectAttribute : System.Attribute { public OnRightClickObjectAttribute(string field) { } }
+
+            /// A statistic of a player went up, e.g. "minecraft.custom:minecraft.jump" or "minecraft.mined:minecraft.stone".
+            [System.AttributeUsage(System.AttributeTargets.Method)]
+            public sealed class OnStatAttribute : System.Attribute { public OnStatAttribute(string criterion) { } }
+
+            /// Base class of scoreboard classes: `public class test : dummy {}` — every static int/bool field
+            /// is a score holder (the field name) in the class's objective (criteria dummy, created on load).
+            /// Using test.anything declares the field automatically.
+            public abstract class dummy { }
+
             /// A compile-time position (an execute context + coordinates).
             public struct Position
             {
@@ -116,6 +162,9 @@ public static class Prelude
                 [Intrinsic("worldspawn")] public static Position GetWorldSpawn() => default;
                 [Intrinsic("setworldspawn")] public static void SetWorldSpawn(Position pos) { }
                 [Intrinsic("spawn.id")] public static void SpawnEntity(string id, Position pos, int count = 1) { }
+                /// Pauses this method for one tick (or `ticks`): the rest of the method runs later via /schedule.
+                /// The caller does not wait — it continues right away.
+                [Intrinsic("wait")] public static void Wait(int ticks = 1) { }
             }
         }
 
@@ -145,6 +194,10 @@ public static class Prelude
                 [MCS.Intrinsic("entity.pos")] public MCS.Position Position => default;
                 [MCS.Intrinsic("entity.kill")] public void Kill() { }
                 [MCS.Intrinsic("entity.tp")] public void Teleport(MCS.Position pos) { }
+                /// A new, unspawned entity object of the same type with the same pre-spawn properties.
+                [MCS.Intrinsic("obj.clone")] public Entity Clone() => null;
+                /// Discards this object: it cannot be used any more.
+                [MCS.Intrinsic("obj.dispose")] public void Dispose() { }
             }
         }
 
@@ -155,6 +208,10 @@ public static class Prelude
             {
                 [MCS.Intrinsic("block.new")] public Block(string id) { }
                 protected Block(int _) { }
+                /// A new block object with the same states.
+                [MCS.Intrinsic("obj.clone")] public Block Clone() => null;
+                /// Discards this object: it cannot be used any more.
+                [MCS.Intrinsic("obj.dispose")] public void Dispose() { }
             }
         }
 
@@ -255,6 +312,104 @@ public static class Prelude
             }
         }
 
+        namespace MathLib
+        {
+            /// Trigonometry on Q15.16 fixed point (quarter-wave lookup table + linear interpolation, no Taylor series).
+            /// Angles are in radians. The float overloads compute in double precision and round to float.
+            public static class Math
+            {
+                public const double PI = 3.14159265358979323846;
+                public const double Tau = 6.28318530717958647692;
+                public const double Deg2Rad = PI / 180;
+                public const double Rad2Deg = 180 / PI;
+
+                [MCS.Intrinsic("math.sin")] public static double Sin(double radians) => 0;
+                [MCS.Intrinsic("math.sin")] public static float Sin(float radians) => 0;
+                [MCS.Intrinsic("math.cos")] public static double Cos(double radians) => 0;
+                [MCS.Intrinsic("math.cos")] public static float Cos(float radians) => 0;
+                [MCS.Intrinsic("math.tan")] public static double Tan(double radians) => 0;
+                [MCS.Intrinsic("math.tan")] public static float Tan(float radians) => 0;
+
+                /// Division rounded down (toward −∞) — a single scoreboard operation, faster than `/`.
+                [MCS.Intrinsic("math.floordiv")] public static int FloorDiv(int a, int b) => 0;
+                /// Remainder with the sign of the divisor (pairs with FloorDiv) — a single scoreboard operation.
+                [MCS.Intrinsic("math.floormod")] public static int FloorMod(int a, int b) => 0;
+            }
+        }
+
+        namespace ItemLib
+        {
+            /// An item object: give it with m.GiveObject. Each object can be given once — Clone() makes another
+            /// (clones keep the identity, so [OnRightClickObject] reacts to every clone).
+            public sealed class Item
+            {
+                [MCS.Intrinsic("item.new")] public Item(string id) { }
+                public string Name { set { } }
+                /// Lore text; "\n" starts a new line.
+                public string Lore { set { } }
+                public bool Unbreakable { set { } }
+                public bool Glint { set { } }
+                [MCS.Intrinsic("obj.clone")] public Item Clone() => null;
+                [MCS.Intrinsic("obj.dispose")] public void Dispose() { }
+            }
+        }
+
+        namespace GuiLib
+        {
+            public enum DisplaySlot { Sidebar, List, BelowName }
+            public enum BarColor { Blue, Green, Pink, Purple, Red, White, Yellow }
+            public enum BarStyle
+            {
+                [MCS.McId("progress")] Progress,
+                [MCS.McId("notched_6")] Notched6,
+                [MCS.McId("notched_10")] Notched10,
+                [MCS.McId("notched_12")] Notched12,
+                [MCS.McId("notched_20")] Notched20,
+            }
+
+            public static class Gui
+            {
+                /// scoreboard objectives setdisplay <slot> <objective>
+                [MCS.Intrinsic("gui.setdisplay")] public static void SetDisplay(DisplaySlot slot, string objective) { }
+                [MCS.Intrinsic("gui.setdisplay")] public static void SetDisplay(DisplaySlot slot, Board board) { }
+                /// Empties a display slot.
+                [MCS.Intrinsic("gui.cleardisplay")] public static void ClearDisplay(DisplaySlot slot) { }
+            }
+
+            /// A scoreboard display (sidebar, tab list, below name) with its own objective "<ns>.board.<id>".
+            /// Boards with the same id are the same board.
+            public sealed class Board
+            {
+                [MCS.Intrinsic("gui.board")] public Board(string id, string title = null) { }
+                public string Title { set { } }
+                [MCS.Intrinsic("board.show")] public void Show(DisplaySlot slot = DisplaySlot.Sidebar) { }
+                [MCS.Intrinsic("board.hide")] public void Hide(DisplaySlot slot = DisplaySlot.Sidebar) { }
+                /// Sets a line (a fake player name, no spaces) to a value.
+                [MCS.Intrinsic("board.set")] public void Set(string line, int value) { }
+                /// Sets the score of players (what List / BelowName show).
+                [MCS.Intrinsic("board.set")] public void Set(PlayerLib.Player players, int value) { }
+                [MCS.Intrinsic("board.get")] public int Get(string line) => 0;
+                [MCS.Intrinsic("board.remove")] public void Remove(string line) { }
+                [MCS.Intrinsic("board.clear")] public void Clear() { }
+            }
+
+            /// A boss bar "<ns>:<id>". Boss bars with the same id are the same bar.
+            public sealed class BossBar
+            {
+                [MCS.Intrinsic("gui.bossbar")] public BossBar(string id, string title = null) { }
+                public int Value { get; set; }
+                public int Max { get; set; }
+                public BarColor Color { set { } }
+                public BarStyle Style { set { } }
+                public bool Visible { set { } }
+                /// Text; interpolated values ($"Time: {t}") are filled in when it is set.
+                public object Title { set { } }
+                [MCS.Intrinsic("bossbar.show")] public void Show(PlayerLib.Player players) { }
+                [MCS.Intrinsic("bossbar.hide")] public void Hide() { }
+                [MCS.Intrinsic("bossbar.remove")] public void Remove() { }
+            }
+        }
+
         public static class m
         {
             public static class Console
@@ -272,8 +427,19 @@ public static class Prelude
             [MCS.Intrinsic("block.fillobj")] public static bool FillBlockObject(BlockLib.Block block, MCS.Position from, MCS.Position to) => default;
             [MCS.Intrinsic("block.is")] public static bool IsBlock(string id, MCS.Position pos) => default;
             [MCS.Intrinsic("block.isobj")] public static bool IsBlockObject(BlockLib.Block block, MCS.Position pos) => default;
+            /// Gives an item object to players. Consumes the object (see Clone()).
+            [MCS.Intrinsic("item.give")] public static bool GiveObject(ItemLib.Item item, PlayerLib.Player to, int count = 1) => default;
 
             [MCS.Intrinsic("setworldspawn")] public static void SetWorldSpawn(MCS.Position pos) { }
+
+            /// Binds a static int/bool field to an existing score: "objective.holder" (split at the last '.').
+            /// Compile-time: applies to the whole program wherever it is written (also at the top level).
+            [MCS.Intrinsic("mount")] public static bool Mount(int variable, string target) => true;
+            [MCS.Intrinsic("mount")] public static bool Mount(bool variable, string target) => true;
+            [MCS.Intrinsic("mount")] public static bool Mount(int variable, string objective, string holder) => true;
+            [MCS.Intrinsic("mount")] public static bool Mount(bool variable, string objective, string holder) => true;
+            /// Binds a scoreboard class (class X : dummy) to an objective name.
+            [MCS.Intrinsic("mount")] public static bool Mount(System.Type scoreboard, string objective) => true;
             [MCS.Intrinsic("reload")] public static void Reload() { }
 
             /// A raw execute condition, e.g. m.Check("block ~ ~ ~ minecraft:stone") → execute if block ...

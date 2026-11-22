@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Mcs.Compiler;
 
-public enum VK { Int, Bool, Fixed, String, Entity, Position, Block, Ref, Button, Text, Void, Unsupported }
+public enum VK { Int, Bool, Fixed, Double, Array, String, Entity, Position, Block, Ref, Button, Text, Gui, Item, Void, Unsupported }
 
 public sealed record Diag(string File, int Line, int Col, string Message)
 {
@@ -54,7 +54,7 @@ sealed class FnInfo
     public string Ctl => $"${Prefix}#ctl {Obj}";
 }
 
-sealed class LoopCtx { public bool HasBreak, HasContinue, IsEntity; }
+sealed class LoopCtx { public bool HasBreak, HasContinue, IsEntity, IsWait; }
 
 sealed class FnCtx(FnInfo info, SemanticModel model)
 {
@@ -66,14 +66,43 @@ sealed class FnCtx(FnInfo info, SemanticModel model)
     public Stack<LoopCtx> Loops = new();
     public int Temp, Sub;
     public bool UsesCtl;
+    public bool WaitCtl;       // uses Wait() and may return early: continuation calls check the ctl flag
     public int Depth;          // execution depth (each entity foreach / Exec.Run changes @s)
     public RefVar? This;       // instance methods of entity classes
+    // objects (entity / block / item): created where, consumed / disposed where (compile-time single-use rule)
+    public Dictionary<Var, (int depth, string? flag)> Objects = new(ReferenceEqualityComparer.Instance);
+    public Dictionary<Var, SyntaxNode> Consumed = new(ReferenceEqualityComparer.Instance);
+    public Dictionary<Var, SyntaxNode> Disposed = new(ReferenceEqualityComparer.Instance);
+    public List<string> EntryResets = new();
+
+    public (Dictionary<Var, SyntaxNode>, Dictionary<Var, SyntaxNode>) SaveObjects() => (new(Consumed, ReferenceEqualityComparer.Instance), new(Disposed, ReferenceEqualityComparer.Instance));
+    public void RestoreObjects((Dictionary<Var, SyntaxNode> c, Dictionary<Var, SyntaxNode> d) s) { Consumed = new(s.c, ReferenceEqualityComparer.Instance); Disposed = new(s.d, ReferenceEqualityComparer.Instance); }
+    /// After two branches: an object is "used" if either branch used it.
+    public void MergeObjects((Dictionary<Var, SyntaxNode> c, Dictionary<Var, SyntaxNode> d) other)
+    {
+        foreach (var (k, v) in other.c) Consumed.TryAdd(k, v);
+        foreach (var (k, v) in other.d) Disposed.TryAdd(k, v);
+    }
 }
 
 // ------------------------------------------------------------------ code generator
 public sealed partial class Codegen
 {
-    const int Scale = 1000; // fixed-point scale for float/double
+    const int Scale = 1000;    // float: fixed-point ×1000 (1/1000)
+    const int DScale = 65536;  // double: Q15.16 fixed-point (1/65536)
+
+    static bool IsFrac(VK k) => k is VK.Fixed or VK.Double;
+    static int ScaleOf(VK k) => k switch { VK.Fixed => Scale, VK.Double => DScale, _ => 1 };
+    /// Scale factor for "execute store result ... <scale>" (score → NBT value).
+    static string InvScale(VK k) => k switch { VK.Fixed => "0.001", VK.Double => "0.0000152587890625", _ => "1" };
+    /// Formats a scaled constant as a plain number ("1.5").
+    static string FmtScaled(int v, VK k) => k switch
+    {
+        VK.Fixed => (v / (double)Scale).ToString("0.###", CultureInfo.InvariantCulture),
+        VK.Double => (v / (double)DScale).ToString("0.########", CultureInfo.InvariantCulture),
+        _ => v.ToString(CultureInfo.InvariantCulture),
+    };
+    static long FloorDiv(long a, long b) => a / b - ((a % b != 0 && (a < 0) != (b < 0)) ? 1 : 0);
 
     readonly CSharpCompilation comp;
     readonly IReadOnlyList<SyntaxTree> userTrees;
@@ -101,6 +130,9 @@ public sealed partial class Codegen
 
     public CompiledPack Run()
     {
+        // 0. m.Mount(...) bindings (compile-time, so they are known before any field is declared)
+        CollectMounts();
+
         // 1. Collect declarations
         foreach (var tree in userTrees)
         {
@@ -117,17 +149,21 @@ public sealed partial class Codegen
                 string prefix = MethodPrefix(sym);
                 while (fns.Values.Any(f => f.Prefix == prefix)) prefix += "_";
                 var info = new FnInfo { Sym = sym, Decl = md, Prefix = prefix, Path = $"{ns}:{prefix.Replace('.', '/')}", Obj = Obj };
+                bool badParam = false;
                 foreach (var p in sym.Parameters)
                 {
+                    try {
                     info.Params[p] = Kind(p.Type) switch
                     {
-                        VK.Int or VK.Bool or VK.Fixed => new ScoreVar(H($"${prefix}.{p.Name}"), Kind(p.Type)),
+                        VK.Int or VK.Bool or VK.Fixed or VK.Double => new ScoreVar(H($"${prefix}.{p.Name}"), Kind(p.Type)),
                         VK.Entity => new EntVar($"mcs.{ns}.{prefix}.{p.Name}") { Spawned = true },
+                        VK.Array => Unsup<Var>(md, $"Array parameters ({p.Name}) are only supported in [Inline] methods — or use a static array field."),
                         VK.Ref => new RefVar($"{(ClassOf(p.Type)?.IsPlayer == true ? "@a" : "@e")}[tag=mcs.{ns}.{prefix}.{p.Name}]") { Tag = $"mcs.{ns}.{prefix}.{p.Name}", Type = p.Type },
                         _ => Unsup<Var>(md, $"Unsupported parameter type: {p.Type}"),
                     };
+                    } catch (UnsupportedException e) { Error(p.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() ?? e.Node, e.Message); badParam = true; }
                 }
-                fns[sym] = info;
+                if (!badParam) fns[sym] = info;
             }
         }
 
@@ -140,7 +176,15 @@ public sealed partial class Codegen
 
         // 3. Load function and tags
         var load = new List<string> { $"scoreboard objectives add {Obj} dummy" };
+        // top-level asm runs first, in source order (e.g. creating objectives that m.Mount uses)
+        foreach (var f in fns.Values.Where(f => f.Sym.Name.StartsWith(Preprocessor.TopAsmPrefix))) load.Add($"function {f.Path}");
         FinishLibs(load);
+        FinishMath();
+        FinishGui(load);
+        FinishObjects(load);
+        CollectEvents();
+        FinishEvents(load);
+        foreach (var obj in mountObjectives) load.Add($"scoreboard objectives add {obj} dummy");
         FinishEntities(load);
         foreach (var c in consts) load.Add($"scoreboard players set {H($"#{c}")} {c}");
         foreach (var (v, init) in staticInits)
@@ -181,11 +225,16 @@ public sealed partial class Codegen
     {
         if (model.GetDeclaredSymbol(v) is not IFieldSymbol f) return;
         if (f.IsConst) return; // constants are folded by Roslyn
+        if (f.Name.StartsWith(Preprocessor.MountFieldPrefix)) return;   // a top-level m.Mount(...)
+        if (f.IsStatic && (mounts.ContainsKey(f) || IsDummyClass(f.ContainingType))) { DeclareMounted(model, f, v); return; }
         if (!f.IsStatic && IsEntityClass(f.ContainingType)) { ObjectiveOf(f); return; }   // per-entity score
         if (!f.IsStatic) { Error(v, "Only static fields (or fields of entity classes) are supported."); return; }
         if (f.IsReadOnly && f.Type is IArrayTypeSymbol) { DeclareArray(model, f, v); return; }
         var k = Kind(f.Type);
-        if (k is not (VK.Int or VK.Bool or VK.Fixed)) { Error(v, $"Unsupported static field type: {f.Type} (only int/bool/float are supported)"); return; }
+        if (k == VK.Gui) { DeclareGuiStatic(model, f, v); return; }
+        if (k == VK.Item) { DeclareItemStatic(model, f, v); return; }
+        if (k == VK.Array) { DeclareArrayField(model, f, v); return; }
+        if (k is not (VK.Int or VK.Bool or VK.Fixed or VK.Double)) { Error(v, $"Unsupported static field type: {f.Type} (only int/bool/float/double are supported)"); return; }
         string cls = f.ContainingType.Name == Preprocessor.GlobalClass ? "" : Snake(f.ContainingType.Name) + ".";
         var sv = new ScoreVar(H($"$static.{cls}{f.Name}"), k);
         statics[f] = sv;
@@ -214,6 +263,7 @@ public sealed partial class Codegen
         }
         try
         {
+            if (d.Body != null && ContainsWait(d.Body) && MayAbort(d.Body)) cur.WaitCtl = cur.UsesCtl = true;
             if (d.Body != null) EmitStatements(d.Body.Statements);
             else if (d.ExpressionBody != null)
             {
@@ -223,26 +273,184 @@ public sealed partial class Codegen
         }
         catch (UnsupportedException e) { Error(e.Node, e.Message); }
         if (tagThis) Emit($"tag @s remove {cur.This!.Tag}");
+        cur.Sink.InsertRange(0, cur.EntryResets);
         if (cur.UsesCtl) cur.Sink.Insert(0, $"scoreboard players set {info.Ctl} 0");
         pack.Functions[info.Path] = cur.Sink;
     }
 
-    void EmitStatements(IEnumerable<StatementSyntax> stmts)
+    /// k: continuation function to call after the last statement (set inside code that contains Wait()).
+    void EmitStatements(IEnumerable<StatementSyntax> stmts, string? k = null)
     {
         var list = stmts.ToList();
         for (int i = 0; i < list.Count; i++)
         {
+            if (IsWaitStmt(list[i]))
+            {
+                // Everything after this statement becomes a function: the continuation
+                var rest = list.Skip(i + 1).ToList();
+                try
+                {
+                    CheckWaitContext(list[i]);
+                    string? kr = rest.Count > 0 ? ContFn("wait", () => EmitStatements(rest, k)) : k;
+                    EmitWaitStmt(list[i], kr);
+                }
+                catch (UnsupportedException e) { Error(e.Node, e.Message); }
+                return;
+            }
             try { EmitStmt(list[i]); }
             catch (UnsupportedException e) { Error(e.Node, e.Message); }
             if (i < list.Count - 1 && cur.UsesCtl && MayAbort(list[i]))
             {
                 // Run the rest only if no return/break/continue happened
                 var rest = list.Skip(i + 1).ToList();
-                var cmds = Capture(() => EmitStatements(rest));
+                var cmds = Capture(() => EmitStatements(rest, k));
                 EmitGuarded($"if score {cur.Info.Ctl} matches 0", cmds, "cont");
                 return;
             }
         }
+        if (k != null) EmitCont(k);
+    }
+
+    // ================================================================ Wait() — continuation splitting
+    // Wait() schedules "the rest of the method" one tick later and returns. Statements that contain a Wait()
+    // are compiled in continuation-passing style: every branch / loop body ends by calling its continuation,
+    // and Wait() schedules the continuation instead of calling it.
+
+    bool IsWaitCall(ExpressionSyntax e) => e is InvocationExpressionSyntax inv && Intrinsic(cur.Model.GetSymbolInfo(inv).Symbol) == "wait";
+
+    bool ContainsWait(SyntaxNode n) => n.DescendantNodesAndSelf(x => x is not (LambdaExpressionSyntax or LocalFunctionStatementSyntax or AnonymousMethodExpressionSyntax))
+        .OfType<InvocationExpressionSyntax>().Any(IsWaitCall);
+
+    bool IsWaitStmt(StatementSyntax s) => s switch
+    {
+        ExpressionStatementSyntax es => IsWaitCall(es.Expression),
+        BlockSyntax or IfStatementSyntax or WhileStatementSyntax or ForStatementSyntax or DoStatementSyntax => ContainsWait(s),
+        _ => false,   // other statements reach the "wait" intrinsic, which reports an error
+    };
+
+    void CheckWaitContext(SyntaxNode at)
+    {
+        if (cur.Depth > 0 || cur.This != null)
+            throw new UnsupportedException(at, "Wait() cannot be used in entity contexts (instance methods, foreach over entities, Run): the execution context (@s, position) is lost after a tick.");
+        if (!cur.Info.Sym.ReturnsVoid)
+            throw new UnsupportedException(at, "Methods that use Wait() must return void (the caller continues before the method finishes).");
+    }
+
+    static List<StatementSyntax> Stmts(StatementSyntax s) => s is BlockSyntax b ? b.Statements.ToList() : new() { s };
+
+    /// A continuation function (also a possible schedule target, so it resets the control flag).
+    string ContFn(string kind, Action body)
+    {
+        string path = ReservePath(kind);
+        var cmds = Capture(body);
+        if (cur.WaitCtl) cmds.Insert(0, $"scoreboard players set {cur.Info.Ctl} 0");
+        pack.Functions[path] = cmds;
+        return path;
+    }
+
+    void EmitCont(string k) => Emit(cur.WaitCtl ? $"execute if score {cur.Info.Ctl} matches 0 run function {k}" : $"function {k}");
+
+    void EmitWaitStmt(StatementSyntax s, string? kr)
+    {
+        switch (s)
+        {
+            case ExpressionStatementSyntax es:
+            {
+                var args = ((InvocationExpressionSyntax)es.Expression).ArgumentList.Arguments;
+                int ticks = args.Count > 0 ? ConstSlot(args[0].Expression) : 1;
+                if (ticks < 1) throw new UnsupportedException(es, "Wait(ticks) needs at least 1 tick.");
+                if (kr != null) Emit($"schedule function {kr} {ticks}t append");
+                break;
+            }
+            case BlockSyntax b: EmitStatements(b.Statements, kr); break;
+            case IfStatementSyntax ifs: EmitWaitIf(ifs, kr); break;
+            case WhileStatementSyntax ws: EmitWaitLoop(ws.Condition, ws.Statement, null, kr); break;
+            case ForStatementSyntax fs:
+                if (fs.Declaration != null)
+                    foreach (var v in fs.Declaration.Variables)
+                        DeclareLocal((ILocalSymbol)cur.Model.GetDeclaredSymbol(v)!, v.Initializer?.Value, v);
+                foreach (var init in fs.Initializers) EmitExprStatement(init);
+                EmitWaitLoop(fs.Condition, fs.Statement, fs.Incrementors, kr);
+                break;
+            case DoStatementSyntax ds: EmitWaitDo(ds, kr); break;
+        }
+    }
+
+    // The branch temp t is set to 2 at the start of each branch: the continuation may loop back through this
+    // same code and overwrite t, and without the reset the second dispatch line could also fire on return.
+    void EmitWaitIf(IfStatementSyntax s, string? kr)
+    {
+        var c = EvalCond(s.Condition);
+        if (c.Const is bool b)
+        {
+            if (b) EmitStatements(Stmts(s.Statement), kr);
+            else if (s.Else != null) EmitStatements(Stmts(s.Else.Statement), kr);
+            else if (kr != null) EmitCont(kr);
+            return;
+        }
+        string t = Materialize(c);
+        var before = cur.SaveObjects();
+        var thenCmds = Capture(() => { Emit($"scoreboard players set {t} 2"); EmitStatements(Stmts(s.Statement), kr); });
+        var afterThen = cur.SaveObjects();
+        cur.RestoreObjects(before);
+        var elseCmds = Capture(() =>
+        {
+            Emit($"scoreboard players set {t} 2");
+            if (s.Else != null) EmitStatements(Stmts(s.Else.Statement), kr);
+            else if (kr != null) EmitCont(kr);
+        });
+        cur.MergeObjects(afterThen);
+        Emit($"execute if score {t} matches 1 run function {NewSub("if", thenCmds)}");
+        if (elseCmds.Count > 1) Emit($"execute if score {t} matches 0 run function {NewSub("else", elseCmds)}");
+    }
+
+    /// head: condition → body or exit(kr); body ends by calling next (incrementors + head).
+    void EmitWaitLoop(ExpressionSyntax? cond, StatementSyntax stmt, SeparatedSyntaxList<ExpressionSyntax>? incrementors, string? kr)
+    {
+        string head = ReservePath("while"), body = ReservePath("loop");
+        string? t = null;
+        var headCmds = Capture(() => t = EmitLoopTest(cond, body, kr));
+        if (cur.WaitCtl) headCmds.Insert(0, $"scoreboard players set {cur.Info.Ctl} 0");
+        pack.Functions[head] = headCmds;
+        string next = incrementors is { Count: > 0 } incs
+            ? ContFn("next", () => { foreach (var inc in incs) EmitExprStatement(inc); Emit($"function {head}"); })
+            : head;
+        EmitWaitBody(body, t, stmt, next);
+        Emit($"function {head}");
+    }
+
+    void EmitWaitDo(DoStatementSyntax ds, string? kr)
+    {
+        string body = ReservePath("do");
+        string? t = null;
+        string check = ContFn("dowhile", () => t = EmitLoopTest(ds.Condition, body, kr));
+        EmitWaitBody(body, t, ds.Statement, check);
+        Emit($"function {body}");
+    }
+
+    /// Emits "if cond → function body, else → kr". Returns the branch temp (null for a constant condition).
+    string? EmitLoopTest(ExpressionSyntax? cond, string body, string? kr)
+    {
+        var c = cond == null ? Cond.Of(true) : EvalCond(cond);
+        if (c.Const == true) { Emit($"function {body}"); return null; }
+        if (c.Const == false) { if (kr != null) EmitCont(kr); return null; }
+        string t = Materialize(c);
+        Emit($"execute if score {t} matches 1 run function {body}");
+        if (kr != null) Emit($"execute if score {t} matches 0 run function {NewSub("exit", new() { $"scoreboard players set {t} 2", $"function {kr}" })}");
+        return t;
+    }
+
+    void EmitWaitBody(string path, string? t, StatementSyntax stmt, string next)
+    {
+        cur.Loops.Push(new LoopCtx { IsWait = true });
+        var cmds = Capture(() =>
+        {
+            if (t != null) Emit($"scoreboard players set {t} 2");
+            EmitStatements(Stmts(stmt), next);
+        });
+        cur.Loops.Pop();
+        if (cur.WaitCtl) cmds.Insert(0, $"scoreboard players set {cur.Info.Ctl} 0");
+        pack.Functions[path] = cmds;
     }
 
     static bool MayAbort(SyntaxNode s) => s.DescendantNodesAndSelf(n => n is not (LambdaExpressionSyntax or LocalFunctionStatementSyntax))
@@ -275,10 +483,12 @@ public sealed partial class Codegen
             case ReturnStatementSyntax rs: EmitReturn(rs); break;
             case BreakStatementSyntax bs:
                 if (cur.Loops.Count == 0) throw new UnsupportedException(bs, "break is only supported inside loops (switch is not supported).");
+                if (cur.Loops.Peek().IsWait) throw new UnsupportedException(bs, "break cannot be used in a loop that contains Wait().");
                 cur.Loops.Peek().HasBreak = true; cur.UsesCtl = true;
                 Emit($"scoreboard players set {cur.Info.Ctl} 2");
                 break;
             case ContinueStatementSyntax cs:
+                if (cur.Loops.Count > 0 && cur.Loops.Peek().IsWait) throw new UnsupportedException(cs, "continue cannot be used in a loop that contains Wait().");
                 cur.Loops.Peek().HasContinue = true; cur.UsesCtl = true;
                 Emit($"scoreboard players set {cur.Info.Ctl} 3");
                 break;
@@ -292,10 +502,14 @@ public sealed partial class Codegen
         var k = Kind(sym.Type);
         switch (k)
         {
-            case VK.Int or VK.Bool or VK.Fixed:
+            case VK.Int or VK.Bool or VK.Fixed or VK.Double:
                 var sv = new ScoreVar(UniqueHolder(sym.Name), k);
                 cur.Locals[sym] = sv;
                 if (init != null) AssignHolder(sv, init);
+                break;
+            case VK.Array:
+                if (init == null) throw new UnsupportedException(at, $"{sym.Name} needs a value (new {sym.Type.ToDisplayString().TrimEnd('[', ']')}[n] or {{ … }}).");
+                cur.Locals[sym] = ArrayValue(init, sym.Name, ElemKind(sym.Type));
                 break;
             case VK.String:
                 cur.Locals[sym] = new StrVar(init == null ? null : ConstString(init));
@@ -308,18 +522,27 @@ public sealed partial class Codegen
                     if (cur.Model.GetSymbolInfo(arg).Symbol is not IFieldSymbol ef)
                         throw new UnsupportedException(arg, "The entity type must be a constant (e.g. EntityType.Zombie).");
                     cur.Locals[sym] = new EntVar(EntityTag(sym.Name)) { TypeId = ResolveId("entities", McIdOf(ef) ?? Snake(ef.Name), arg) };
+                    RegisterObject(cur.Locals[sym], sym, at);
+                }
+                else if (IsCloneCall(init, out var cloneSrc))
+                {
+                    cur.Locals[sym] = CloneEntity(GetEnt(cloneSrc), EntityTag(sym.Name));
+                    RegisterObject(cur.Locals[sym], sym, at);
                 }
                 else cur.Locals[sym] = GetEnt(init); // alias
                 break;
             case VK.Position:
                 cur.Locals[sym] = new PosVar(init == null ? Pos.Here : EvalPos(init));
                 break;
-            case VK.Block or VK.Ref or VK.Button or VK.Text:
+            case VK.Block or VK.Ref or VK.Button or VK.Text or VK.Gui or VK.Item:
                 if (init == null) throw new UnsupportedException(at, $"{sym.Name} needs an initial value.");
-                cur.Locals[sym] = EvalLibObject(init, k);
+                cur.Locals[sym] = EvalLibObject(init, k, sym);
+                if (k is VK.Block or VK.Item && (init is BaseObjectCreationExpressionSyntax || IsCloneCall(init, out _))) RegisterObject(cur.Locals[sym], sym, at);
                 break;
             default:
-                throw new UnsupportedException(at, $"Unsupported variable type: {sym.Type}");
+                throw new UnsupportedException(at, sym.Type is IArrayTypeSymbol
+                    ? $"Unsupported array type: {sym.Type}. Arrays hold int, bool, float or double (string arrays only as static readonly tables)."
+                    : $"Unsupported variable type: {sym.Type}");
         }
     }
 
@@ -352,7 +575,7 @@ public sealed partial class Codegen
         else if (rs.Expression != null)
         {
             var k = Kind(cur.Info.Sym.ReturnType);
-            if (k is not (VK.Int or VK.Bool or VK.Fixed)) throw new UnsupportedException(rs, $"Unsupported return type: {cur.Info.Sym.ReturnType}");
+            if (k is not (VK.Int or VK.Bool or VK.Fixed or VK.Double)) throw new UnsupportedException(rs, $"Unsupported return type: {cur.Info.Sym.ReturnType}");
             AssignHolder(new ScoreVar(cur.Info.Ret, k), rs.Expression);
         }
         bool isTail = rs.Parent == cur.Info.Decl.Body && cur.Info.Decl.Body!.Statements.Last() == rs;
@@ -377,30 +600,33 @@ public sealed partial class Codegen
         }
         if (c.Const is bool b) { EmitStmt(b ? s.Statement : s.Else.Statement); return; }
         string t = Materialize(c);
+        var before = cur.SaveObjects();
         var thenCmds = Capture(() => EmitStmt(s.Statement));
+        var afterThen = cur.SaveObjects();
+        cur.RestoreObjects(before);
         var elseCmds = Capture(() => EmitStmt(s.Else.Statement));
+        cur.MergeObjects(afterThen);
         EmitGuarded($"if score {t} matches 1", thenCmds, "if");
         EmitGuarded($"if score {t} matches 0", elseCmds, "else");
     }
 
-    void EmitWhile(ExpressionSyntax? cond, StatementSyntax stmt, SeparatedSyntaxList<ExpressionSyntax>? incrementors)
+    void EmitWhile(ExpressionSyntax? cond, StatementSyntax stmt, SeparatedSyntaxList<ExpressionSyntax>? incrementors) =>
+        EmitLoop(() => cond == null ? Cond.Of(true) : EvalCond(cond), () => EmitStmt(stmt), MayAbort(stmt),
+            incrementors == null ? null : () => { foreach (var inc in incrementors) EmitExprStatement(inc); });
+
+    void EmitLoop(Func<Cond> cond, Action emitBody, bool abortable, Action? incr)
     {
         var loop = new LoopCtx();
         string head = ReservePath("while"), body = ReservePath("loop");
-        var headCmds = Capture(() =>
-        {
-            var c = cond == null ? Cond.Of(true) : EvalCond(cond);
-            EmitGuarded(c, new() { $"function {body}" }, "x");
-        });
+        var headCmds = Capture(() => EmitGuarded(cond(), new() { $"function {body}" }, "x"));
         cur.Loops.Push(loop);
         var bodyCmds = Capture(() =>
         {
-            EmitStmt(stmt);
-            bool abortable = MayAbort(stmt);
+            emitBody();
             if (loop.HasContinue) Emit($"execute if score {cur.Info.Ctl} matches 3 run scoreboard players set {cur.Info.Ctl} 0");
             var tail = Capture(() =>
             {
-                if (incrementors != null) foreach (var inc in incrementors) EmitExprStatement(inc);
+                incr?.Invoke();
                 Emit($"function {head}");
             });
             if (abortable) EmitGuarded($"if score {cur.Info.Ctl} matches 0", tail, "next");
@@ -475,14 +701,17 @@ public sealed partial class Codegen
 
     ScoreVar IncDec(ExpressionSyntax target, bool inc)
     {
+        if (ElemTarget(target) is var (ea, ei))
+            return new ScoreVar(((ScoreOp)ElemIncDec(ea, ei, inc, false, target)).Holder, ea.Elem);
         var v = GetVar(target) as ScoreVar ?? throw new UnsupportedException(target, "++/-- only works on numeric variables.");
-        int step = v.Kind == VK.Fixed ? Scale : 1;
+        int step = ScaleOf(v.Kind);
         Emit($"scoreboard players {(inc ? "add" : "remove")} {v.Holder} {step}");
         return v;
     }
 
     Var? EmitAssignment(AssignmentExpressionSyntax a)
     {
+        if (ElemTarget(a.Left) is var (la, li)) return EmitElemAssign(a, la, li);
         var sym = cur.Model.GetSymbolInfo(a.Left).Symbol;
         // Entity property
         if (sym is IPropertySymbol prop && a.Left is MemberAccessExpressionSyntax ma && Kind(prop.ContainingType) == VK.Entity)
@@ -518,8 +747,16 @@ public sealed partial class Codegen
                 SetLocal(sym!, GetEnt(a.Right)); return null;
             case PosVar:
                 SetLocal(sym!, new PosVar(EvalPos(a.Right))); return null;
-            case BlockVar or RefVar or ButtonVar or TextVar:
-                SetLocal(sym!, EvalLibObject(a.Right, Kind(cur.Model.GetTypeInfo(a.Left).Type))); return null;
+            case ArrVar:
+                if (!a.IsKind(SyntaxKind.SimpleAssignmentExpression)) throw new UnsupportedException(a, "Only '=' works on array variables.");
+                if (sym is not ILocalSymbol) throw new UnsupportedException(a, "Static array fields cannot be reassigned (set their elements instead).");
+                SetLocal(sym, ArrayValue(a.Right, sym.Name, ElemKind(((ILocalSymbol)sym).Type)));
+                return null;
+            case BlockVar or RefVar or ButtonVar or TextVar or GuiVar or ItemVar:
+                if (sym is IFieldSymbol) throw new UnsupportedException(a, "Static objects cannot be reassigned (use Clone() to make another).");
+                SetLocal(sym!, EvalLibObject(a.Right, Kind(cur.Model.GetTypeInfo(a.Left).Type), sym));
+                if (a.Right is BaseObjectCreationExpressionSyntax || IsCloneCall(a.Right, out _)) RegisterObject(cur.Locals[sym!], sym!, a);
+                return null;
         }
         throw new UnsupportedException(a, "Unsupported assignment target.");
     }
@@ -556,25 +793,63 @@ public sealed partial class Codegen
                 }
                 else Emit($"scoreboard players operation {h} {op}= {((ScoreOp)r).Holder}");
                 break;
+            case '*' when kind == VK.Double:
+                // Q15.16 × Q15.16 needs a 48-bit intermediate: split into 16-bit halves (__math/dmul)
+                if (r is ConstOp dm && dm.Value % DScale == 0) Emit($"scoreboard players operation {h} *= {ConstHolder(dm.Value / DScale)}");
+                else CallMath2("dmul", h, r);
+                break;
+            case '/' when kind == VK.Double:
+                if (r is ConstOp dd && dd.Value != 0 && dd.Value % DScale == 0) TruncOp(h, '/', new ConstOp(dd.Value / DScale));
+                else CallMath2("ddiv", h, r);
+                break;
             case '*':
                 Emit($"scoreboard players operation {h} *= {Holder(r)}");
                 if (kind == VK.Fixed) Emit($"scoreboard players operation {h} /= {ConstHolder(Scale)}");
                 break;
             case '/':
                 if (kind == VK.Fixed) Emit($"scoreboard players operation {h} *= {ConstHolder(Scale)}");
-                Emit($"scoreboard players operation {h} /= {Holder(r)}");
+                TruncOp(h, '/', r);
                 break;
             case '%':
-                Emit($"scoreboard players operation {h} %= {Holder(r)}");
+                // same scale on both sides, so the C# remainder works on the raw scores for every numeric type
+                TruncOp(h, '%', r);
                 break;
         }
     }
 
+    /// h = h / r or h % r with C# semantics: the quotient rounds toward zero and the remainder takes the
+    /// sign of the dividend. (Scoreboard /= and %= floor instead: -7 / 2 = -4, -7 % 2 = 1.)
+    void TruncOp(string h, char op, Operand r)
+    {
+        if (r is ConstOp c && c.Value != 0 && c.Value != int.MinValue)
+        {
+            int d = Math.Abs(c.Value);
+            if (d == 1)
+            {
+                if (op == '%') Emit($"scoreboard players set {h} 0");
+                else if (c.Value < 0) Emit($"scoreboard players operation {h} *= {ConstHolder(-1)}");
+                return;
+            }
+            // |h| op d, then put the sign back
+            string s = Temp();
+            Emit($"execute store success score {s} if score {h} matches ..-1");
+            Emit($"execute if score {s} matches 1 run scoreboard players operation {h} *= {ConstHolder(-1)}");
+            Emit($"scoreboard players operation {h} {op}= {ConstHolder(d)}");
+            bool flipWhenNeg = op == '%' || c.Value > 0;   // a / -d: the sign flips when a >= 0
+            Emit($"execute if score {s} matches {(flipWhenNeg ? 1 : 0)} run scoreboard players operation {h} *= {ConstHolder(-1)}");
+            return;
+        }
+        CallMath2(op == '/' ? "idiv" : "irem", h, r);
+    }
+
+    /// A plain scoreboard operation with a constant (for values known to be non-negative).
+    void RawOp(string h, char op, int c) => Emit($"scoreboard players operation {h} {op}= {ConstHolder(c)}");
+
     static int? Fold(int a, char op, int b, VK kind) => op switch
     {
         '+' => a + b, '-' => a - b,
-        '*' => kind == VK.Fixed ? (int)((long)a * b / Scale) : a * b,
-        '/' when b != 0 => kind == VK.Fixed ? (int)((long)a * Scale / b) : a / b,
+        '*' => kind switch { VK.Fixed => (int)((long)a * b / Scale), VK.Double => (int)FloorDiv((long)a * b, DScale), _ => a * b },
+        '/' when b != 0 => kind switch { VK.Fixed => (int)((long)a * Scale / b), VK.Double => (int)Math.Clamp((long)a * DScale / b, int.MinValue, int.MaxValue), _ => a / b },
         '%' when b != 0 => a % b,
         _ => null,
     };
@@ -595,25 +870,42 @@ public sealed partial class Codegen
     Operand Convert(Operand op, VK from, VK to, SyntaxNode at)
     {
         if (from == to || (from == VK.Bool && to == VK.Int)) return op;
-        if (from == VK.Int && to == VK.Fixed)
+        if (from is VK.Int or VK.Bool && IsFrac(to))
         {
-            if (op is ConstOp c) return new ConstOp(c.Value * Scale);
-            var t = ToTemp(op); ApplyOp(t, '*', new ConstOp(Scale), VK.Int); return new ScoreOp(t);
+            if (op is ConstOp c) return new ConstOp(c.Value * ScaleOf(to));
+            var t = ToTemp(op); ApplyOp(t, '*', new ConstOp(ScaleOf(to)), VK.Int); return new ScoreOp(t);
         }
-        if (from == VK.Fixed && to == VK.Int)
+        if (IsFrac(from) && to == VK.Int)
         {
-            if (op is ConstOp c) return new ConstOp(c.Value / Scale);
-            var t = ToTemp(op); ApplyOp(t, '/', new ConstOp(Scale), VK.Int); return new ScoreOp(t);
+            if (op is ConstOp c) return new ConstOp(c.Value / ScaleOf(from));
+            var t = ToTemp(op); ApplyOp(t, '/', new ConstOp(ScaleOf(from)), VK.Int); return new ScoreOp(t);
         }
+        // float (×1000) ↔ double (×65536): 65536/1000 = 8192/125
+        if (from == VK.Fixed && to == VK.Double) return MulDiv(op, 8192, 125);
+        if (from == VK.Double && to == VK.Fixed) return MulDiv(op, 125, 8192);
         if (to is VK.Unsupported) return op; // e.g. object (WriteLine(object))
         throw new UnsupportedException(at, $"Unsupported conversion: {from} -> {to}");
+    }
+
+    /// floor(op * num / den) without overflowing the intermediate product (num, den small).
+    Operand MulDiv(Operand op, int num, int den)
+    {
+        if (op is ConstOp c) return new ConstOp((int)FloorDiv((long)c.Value * num, den));
+        string q = ToTemp(op), r = ToTemp(new ScoreOp(q));
+        Emit($"scoreboard players operation {q} /= {ConstHolder(den)}");
+        Emit($"scoreboard players operation {r} %= {ConstHolder(den)}");
+        Emit($"scoreboard players operation {q} *= {ConstHolder(num)}");
+        Emit($"scoreboard players operation {r} *= {ConstHolder(num)}");
+        Emit($"scoreboard players operation {r} /= {ConstHolder(den)}");
+        Emit($"scoreboard players operation {q} += {r}");
+        return new ScoreOp(q);
     }
 
     static int ScaleConst(object? v, VK k) => v switch
     {
         bool b => b ? 1 : 0,
         null => 0,
-        _ when k == VK.Fixed => (int)Math.Round(System.Convert.ToDouble(v, CultureInfo.InvariantCulture) * Scale),
+        _ when IsFrac(k) => (int)Math.Clamp(Math.Round(System.Convert.ToDouble(v, CultureInfo.InvariantCulture) * ScaleOf(k)), int.MinValue, int.MaxValue),
         _ => (int)System.Convert.ToDouble(v, CultureInfo.InvariantCulture),
     };
 
@@ -629,6 +921,8 @@ public sealed partial class Codegen
                     return EntityGet(GetEnt(ma.Expression), prop, kind, e);
                 if (sym is IPropertySymbol lprop && TryLibPropertyGet(lprop, e as MemberAccessExpressionSyntax, kind) is Operand lop)
                     return lop;
+                if (sym is IPropertySymbol { Name: "Length" } && e is MemberAccessExpressionSyntax lm2 && ArrOf(lm2.Expression) is ArrVar wa)
+                    return new ConstOp(wa.Length);
                 if (sym is IPropertySymbol { Name: "Length" } && e is MemberAccessExpressionSyntax lm && ArrayOf(lm.Expression) is IFieldSymbol la)
                     return new ConstOp(arrays[la].Count);
                 var gv = GetVar(e);
@@ -660,6 +954,8 @@ public sealed partial class Codegen
                 ApplyOp(t, op, EvalNum(b.Right, kind), kind);
                 return new ScoreOp(t);
             }
+            case ElementAccessExpressionSyntax wea when ElemTarget(wea) is var (ra, ri):
+                return ArrGet(ra, ri, wea);
             case ElementAccessExpressionSyntax ea when ArrayOf(ea.Expression) is IFieldSymbol af:
                 return ArrayElement(af, EvalNum(ea.ArgumentList.Arguments[0].Expression, VK.Int), ea);
             case PrefixUnaryExpressionSyntax u when u.IsKind(SyntaxKind.UnaryMinusExpression):
@@ -673,6 +969,8 @@ public sealed partial class Codegen
             case PrefixUnaryExpressionSyntax u when u.IsKind(SyntaxKind.UnaryPlusExpression): return EvalNum(u.Operand, kind);
             case PrefixUnaryExpressionSyntax u when u.IsKind(SyntaxKind.PreIncrementExpression) || u.IsKind(SyntaxKind.PreDecrementExpression):
                 return new ScoreOp(IncDec(u.Operand, u.IsKind(SyntaxKind.PreIncrementExpression)).Holder);
+            case PostfixUnaryExpressionSyntax u when ElemTarget(u.Operand) is var (pa, pi):
+                return ElemIncDec(pa, pi, u.IsKind(SyntaxKind.PostIncrementExpression), true, u);
             case PostfixUnaryExpressionSyntax u:
             {
                 var v = GetVar(u.Operand) as ScoreVar ?? throw new UnsupportedException(u, "++/-- only works on numeric variables.");
@@ -758,7 +1056,7 @@ public sealed partial class Codegen
             return Cond.Of(b.IsKind(SyntaxKind.EqualsExpression) ? l == r : l != r);
         }
         var k = Kind(cur.Model.GetTypeInfo(b.Left).ConvertedType);
-        if (k is not (VK.Int or VK.Fixed or VK.Bool)) throw new UnsupportedException(b, $"Comparisons are only supported between numbers/bools ({k}).");
+        if (k is not (VK.Int or VK.Fixed or VK.Double or VK.Bool)) throw new UnsupportedException(b, $"Comparisons are only supported between numbers/bools ({k}).");
         var L = EvalNum(b.Left, k);
         if (L is ScoreOp && !IsPure(b.Right)) L = new ScoreOp(ToTemp(L));
         var R = EvalNum(b.Right, k);
@@ -817,6 +1115,8 @@ public sealed partial class Codegen
     // ================================================================ variables
     Var GetVar(ExpressionSyntax e)
     {
+        if (ElemTarget(e) is var (ga, gi))
+            return gi is ConstOp gc ? new ScoreVar(ElemHolder(ga, gc.Value, e), ga.Elem) : throw new UnsupportedException(e, "A runtime array index cannot be used here.");
         if (e is ThisExpressionSyntax) return ThisRef(e);
         var sym = cur.Model.GetSymbolInfo(e).Symbol;
         if (sym == null) throw new UnsupportedException(e, $"Unknown symbol: {e}");
@@ -827,12 +1127,21 @@ public sealed partial class Codegen
             return new ScoreVar(FieldHolder(recv, ef), Kind(ef.Type));
         }
         if (sym is IFieldSymbol f && statics.TryGetValue(f, out var sv)) return sv;
+        if (sym is IFieldSymbol gf && guiStatics.TryGetValue(gf, out var gv)) return gv;
+        if (sym is IFieldSymbol af2 && arrFields.TryGetValue(af2, out var arv)) return arv;
+        if (sym is IFieldSymbol itf && itemStatics.TryGetValue(itf, out var itv)) return itv;
         if (sym is ILocalSymbol) throw new UnsupportedException(e, ""); // its declaration already failed (error reported there)
         if (sym is IFieldSymbol sf && arrays.ContainsKey(sf)) throw new UnsupportedException(e, $"Use {sf.Name}[index] (arrays are compile-time tables).");
         throw new UnsupportedException(e, $"Cannot use '{sym.Name}' as a variable here.");
     }
 
-    EntVar GetEnt(ExpressionSyntax e) => GetVar(e) as EntVar ?? throw new UnsupportedException(e, "Expected an Entity variable.");
+    EntVar GetEnt(ExpressionSyntax e)
+    {
+        if (IsCloneCall(e, out var src)) return CloneEntity(GetEnt(src), EntityTag("clone"));   // a temporary object
+        var ev = GetVar(e) as EntVar ?? throw new UnsupportedException(e, "Expected an Entity variable.");
+        CheckNotDisposed(ev, e);
+        return ev;
+    }
 
     string Sel(EntVar ev) => $"@e[tag={ev.Tag},limit=1]";
 
@@ -917,9 +1226,12 @@ public sealed partial class Codegen
                 var pos = EvalPos(args[1].Expression);
                 string t = Temp();
                 Emit($"scoreboard players set {t} 0"); // stays 0 if the position entity is missing (execute doesn't run)
-                Emit($"tag @e[tag={ev.Tag}] remove {ev.Tag}");
-                EmitCmd($"execute store success score {t} {pos.ExecPrefix}run summon {ev.TypeId} {pos.Coords} {{Tags:[\"{ev.Tag}\"]}}", inv, pos);
-                EmitGuarded($"if score {t} matches 1", new List<string>(ev.Deferred), "init");
+                Consume(args[0].Expression, ev, inv, () =>
+                {
+                    Emit($"tag @e[tag={ev.Tag}] remove {ev.Tag}");
+                    EmitCmd($"execute store success score {t} {pos.ExecPrefix}run summon {ev.TypeId} {pos.Coords} {{Tags:[\"{ev.Tag}\"]}}", inv, pos);
+                    EmitGuarded($"if score {t} matches 1", new List<string>(ev.Deferred), "init");
+                });
                 ev.Spawned = true;
                 return new ScoreOp(t);
             }
@@ -934,6 +1246,13 @@ public sealed partial class Codegen
                 return null;
             }
         }
+        if (name.StartsWith("math.")) return EmitMath(name, inv);
+        if (name == "item.give") return EmitGive(inv);
+        if (name == "obj.dispose") { EmitDispose(inv); return null; }
+        if (name == "obj.clone") throw new UnsupportedException(inv, "Clone() makes a new object: assign it to a variable or pass it directly (m.GiveObject(wand.Clone(), p)).");
+        if (name == "mount") return new ConstOp(1);   // bound at compile time (CollectMounts)
+        if (name == "wait")
+            throw new UnsupportedException(inv, "Wait() can only be used as a statement directly in a method body or inside if/else, while, for or do-while (not in switch, foreach, lambdas or expressions).");
         return EmitLibIntrinsic(name, inv);
     }
 
@@ -1018,7 +1337,7 @@ public sealed partial class Codegen
             else
             {
                 string h = ev.Spawned ? Holder(EvalNum(value, kind)) : StableCopy(ev, p, value, kind);
-                cmd = $"execute store result entity {Sel(ev)} {path} {type} {(kind == VK.Fixed ? "0.001" : "1")} run scoreboard players get {h}";
+                cmd = $"execute store result entity {Sel(ev)} {path} {type} {InvScale(kind)} run scoreboard players get {h}";
             }
         }
         else if (attr != null)
@@ -1034,7 +1353,7 @@ public sealed partial class Codegen
                 pack.Functions[macro] = new() { $"$attribute {Sel(ev)} {attr} base set $(v)" };
                 var cmds = new[]
                 {
-                    $"execute store result storage {Storage} arg.v double {(kind == VK.Fixed ? "0.001" : "1")} run scoreboard players get {h}",
+                    $"execute store result storage {Storage} arg.v double {InvScale(kind)} run scoreboard players get {h}",
                     $"function {macro} with storage {Storage} arg",
                 };
                 if (ev.Spawned) cur.Sink.AddRange(cmds); else ev.Deferred.AddRange(cmds);
@@ -1057,7 +1376,7 @@ public sealed partial class Codegen
     Operand EntityGet(EntVar ev, IPropertySymbol p, VK kind, SyntaxNode at)
     {
         var (path, type, attr) = PropInfo(p);
-        string scale = kind == VK.Fixed ? Scale.ToString() : "1";
+        string scale = ScaleOf(kind).ToString();
         string t = Temp();
         if (path != null && type is not ("int[]" or "string"))
             Emit($"execute store result score {t} run data get entity {Sel(ev)} {path} {scale}");
@@ -1092,6 +1411,14 @@ public sealed partial class Codegen
         switch (e)
         {
             case ParenthesizedExpressionSyntax p: return Components(p.Expression);
+            case ElementAccessExpressionSyntax sea when ArrayOf(sea.Expression) is IFieldSymbol stf
+                && Kind(((IArrayTypeSymbol)stf.Type).ElementType) == VK.String && TryConstIndex(sea) == null:
+            {
+                // string table with a runtime index: copy the element to storage and show it as an nbt component
+                string path = $"s{storageCounter++}";
+                CopyElement(stf, EvalNum(sea.ArgumentList.Arguments[0].Expression, VK.Int), path, sea);
+                return new() { $"{{\"nbt\":\"{path}\",\"storage\":{Json.Str(Storage)}}}" };
+            }
             case InterpolatedStringExpressionSyntax istr:
                 return istr.Contents.SelectMany(c => c switch
                 {
@@ -1107,6 +1434,7 @@ public sealed partial class Codegen
                 if (m is { Name: "Join", ContainingType.SpecialType: SpecialType.System_String } && inv.ArgumentList.Arguments.Count == 2)
                 {
                     string sep = ConstString(inv.ArgumentList.Arguments[0].Expression) ?? "";
+                    if (ArrOf(inv.ArgumentList.Arguments[1].Expression) is ArrVar ja) return ArrayComps(ja, sep, inv);
                     var (sel, path) = NbtRef(inv.ArgumentList.Arguments[1].Expression);
                     return new() { $"{{\"nbt\":{Json.Str(path + "[]")},\"entity\":{Json.Str(sel)},\"separator\":{Json.Str(sep)}}}" };
                 }
@@ -1133,7 +1461,8 @@ public sealed partial class Codegen
             case VK.Entity: return new() { $"{{\"selector\":{Json.Str(Sel(GetEnt(e)))}}}" };
             case VK.Int: return new() { ScoreComp(Holder(EvalNum(e, VK.Int))) };
             case VK.Bool: return BoolComps(EvalCond(e));
-            case VK.Fixed: return FixedComps(EvalNum(e, VK.Fixed));
+            case VK.Fixed or VK.Double: return FixedComps(EvalNum(e, k), k);
+            case VK.Array: return [Text("["), .. ArrayComps(GetArr(e), ", ", e), Text("]")];
         }
         throw new UnsupportedException(e, "This value cannot be printed.");
     }
@@ -1161,31 +1490,46 @@ public sealed partial class Codegen
         return new() { $"{{\"nbt\":\"{path}\",\"storage\":{Json.Str(Storage)}}}" };
     }
 
-    /// Prints a fixed-point number as "-12.345".
-    List<string> FixedComps(Operand op)
+    /// Prints a fixed-point number as "-12.345" (float) or "-12.34567" (double).
+    List<string> FixedComps(Operand op, VK kind)
     {
-        if (op is ConstOp c) return new() { Text((c.Value / (double)Scale).ToString("0.###", CultureInfo.InvariantCulture)) };
+        int scale = ScaleOf(kind), digits = kind == VK.Double ? 5 : 3;
+        if (op is ConstOp c) return new() { Text((c.Value / (double)scale).ToString("0." + new string('#', digits), CultureInfo.InvariantCulture)) };
         string t = ToTemp(op), sign = $"s{storageCounter++}";
         Emit($"data modify storage {Storage} {sign} set value \"\"");
         Emit($"execute if score {t} matches ..-1 run data modify storage {Storage} {sign} set value \"-\"");
         Emit($"execute if score {t} matches ..-1 run scoreboard players operation {t} *= {ConstHolder(-1)}");
-        string ip = ToTemp(new ScoreOp(t)); ApplyOp(ip, '/', new ConstOp(Scale), VK.Int);
-        string d1 = ToTemp(new ScoreOp(t)); ApplyOp(d1, '/', new ConstOp(100), VK.Int); ApplyOp(d1, '%', new ConstOp(10), VK.Int);
-        string d2 = ToTemp(new ScoreOp(t)); ApplyOp(d2, '/', new ConstOp(10), VK.Int); ApplyOp(d2, '%', new ConstOp(10), VK.Int);
-        string d3 = ToTemp(new ScoreOp(t)); ApplyOp(d3, '%', new ConstOp(10), VK.Int);
-        return new() { $"{{\"nbt\":\"{sign}\",\"storage\":{Json.Str(Storage)}}}", ScoreComp(ip), Text("."), ScoreComp(d1), ScoreComp(d2), ScoreComp(d3) };
+        string ip = ToTemp(new ScoreOp(t)); RawOp(ip, '/', scale);
+        // fraction as a decimal integer in [0, 10^digits)
+        string fr = t;   // float: the digits come straight from t (×1000)
+        if (kind == VK.Double)
+        {
+            fr = ToTemp(new ScoreOp(t)); RawOp(fr, '%', scale);
+            RawOp(fr, '*', 3125); RawOp(fr, '/', 2048); // ×100000/65536
+        }
+        var comps = new List<string> { $"{{\"nbt\":\"{sign}\",\"storage\":{Json.Str(Storage)}}}", ScoreComp(ip), Text(".") };
+        for (int p = digits - 1; p >= 0; p--)
+        {
+            string d = ToTemp(new ScoreOp(fr));
+            if (p > 0) RawOp(d, '/', (int)Math.Pow(10, p));
+            RawOp(d, '%', 10);
+            comps.Add(ScoreComp(d));
+        }
+        return comps;
     }
 
     // ================================================================ utilities
     public static VK Kind(ITypeSymbol? t)
     {
         if (t == null) return VK.Unsupported;
+        if (t is IArrayTypeSymbol { Rank: 1 } arr && Kind(arr.ElementType) is VK.Int or VK.Bool or VK.Fixed or VK.Double) return VK.Array;
         switch (t.SpecialType)
         {
             case SpecialType.System_Int32 or SpecialType.System_Int16 or SpecialType.System_Byte or SpecialType.System_SByte
                 or SpecialType.System_UInt16 or SpecialType.System_Int64 or SpecialType.System_Char: return VK.Int;
             case SpecialType.System_Boolean: return VK.Bool;
-            case SpecialType.System_Single or SpecialType.System_Double: return VK.Fixed;
+            case SpecialType.System_Single: return VK.Fixed;
+            case SpecialType.System_Double: return VK.Double;
             case SpecialType.System_String: return VK.String;
             case SpecialType.System_Void: return VK.Void;
         }
@@ -1195,6 +1539,8 @@ public sealed partial class Codegen
         if (t.Name == "Position" && nsName == "MCS") return VK.Position;
         if (t.Name == "Button" && nsName == "TuiLib") return VK.Button;
         if (t.Name == "Text" && nsName == "TuiLib") return VK.Text;
+        if (t.Name is "Board" or "BossBar" && nsName == "GuiLib") return VK.Gui;
+        if (t.Name == "Item" && nsName == "ItemLib") return VK.Item;
         for (var bt = t as INamedTypeSymbol; bt != null; bt = bt.BaseType)
         {
             if (bt.Name == "Block" && bt.ContainingNamespace?.ToDisplayString() == "BlockLib") return VK.Block;

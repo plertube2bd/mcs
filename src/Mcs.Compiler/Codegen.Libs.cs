@@ -107,7 +107,7 @@ public sealed partial class Codegen
             foreach (var (name, op, kind) in args)
             {
                 int v = ((ConstOp)op).Value;
-                s = s.Replace($"$({name})", kind == VK.Fixed ? (v / (double)Scale).ToString("0.###", CultureInfo.InvariantCulture) : v.ToString(CultureInfo.InvariantCulture));
+                s = s.Replace($"$({name})", FmtScaled(v, kind));
             }
             return new() { s };
         }
@@ -116,8 +116,8 @@ public sealed partial class Codegen
         var cmds = new List<string>();
         foreach (var (name, op, kind) in args)
         {
-            if (op is ConstOp c) cmds.Add($"data modify storage {Storage} arg.{name} set value {(kind == VK.Fixed ? (c.Value / (double)Scale).ToString("0.###", CultureInfo.InvariantCulture) + "d" : c.Value)}");
-            else cmds.Add($"execute store result storage {Storage} arg.{name} {(kind == VK.Fixed ? "double 0.001" : "int 1")} run scoreboard players get {Holder(op)}");
+            if (op is ConstOp c) cmds.Add($"data modify storage {Storage} arg.{name} set value {(IsFrac(kind) ? FmtScaled(c.Value, kind) + "d" : c.Value)}");
+            else cmds.Add($"execute store result storage {Storage} arg.{name} {(IsFrac(kind) ? "double " + InvScale(kind) : "int 1")} run scoreboard players get {Holder(op)}");
         }
         if (!macroFns.TryGetValue(template, out var fn))
         {
@@ -130,9 +130,16 @@ public sealed partial class Codegen
     }
 
     // ================================================================ library objects (Block / Player / Button / Text)
-    Var EvalLibObject(ExpressionSyntax e, VK kind)
+    Var EvalLibObject(ExpressionSyntax e, VK kind, ISymbol? declared = null)
     {
         if (e is ParenthesizedExpressionSyntax p) return EvalLibObject(p.Expression, kind);
+        if (IsCloneCall(e, out var cloneSrc))
+            return EvalLibObject(cloneSrc, kind) switch
+            {
+                BlockVar b => new BlockVar(b.Id) { States = new(b.States) },
+                ItemVar it => it.Clone(),
+                _ => throw new UnsupportedException(e, "Clone() works on entity, block and item objects."),
+            };
         if (kind == VK.Ref && EvalRefExpr(e) is RefVar rr) return rr;
         var sym = cur.Model.GetSymbolInfo(e).Symbol;
         switch (Intrinsic(sym))
@@ -166,6 +173,12 @@ public sealed partial class Codegen
                 case VK.Text:
                     v = new TextVar(Components(args[0].Expression));
                     break;
+                case VK.Gui:
+                    v = CreateGui(cur.Model, oc);
+                    break;
+                case VK.Item:
+                    v = CreateItem(cur.Model, oc, $"{ns}:{(declared != null ? cur.Info.Prefix.Replace('.', '_') + "." + Snake(declared.Name) : "item")}", true);
+                    return v;
                 default: throw new UnsupportedException(e, $"Cannot create {kind} here.");
             }
             if (oc.Initializer != null)
@@ -179,7 +192,8 @@ public sealed partial class Codegen
             return obj ?? throw new UnsupportedException(e, "This [Inline] method does not return an object.");
         }
         var existing = GetVar(e);
-        if (existing is BlockVar or RefVar or ButtonVar or TextVar) return existing;
+        if (existing is BlockVar or ItemVar) CheckNotDisposed(existing, e);
+        if (existing is BlockVar or RefVar or ButtonVar or TextVar or GuiVar or ItemVar) return existing;
         throw new UnsupportedException(e, $"Expected a {kind} value.");
     }
 
@@ -221,6 +235,12 @@ public sealed partial class Codegen
         var cv = cur.Model.GetConstantValue(value);
         switch (v)
         {
+            case GuiVar gv: EmitGuiSet(gv, p, value); return;
+            case ItemVar iv:
+                if (!cv.HasValue) throw new UnsupportedException(value, $"{p.Name} must be a compile-time constant.");
+                if (itemStatics.ContainsValue(iv)) throw new UnsupportedException(value, "Set the properties of a static Item in its initializer ({ Name = … }).");
+                SetItemProp(iv, p.Name, cv.Value, value);
+                return;
             case BlockVar bv:
             {
                 var st = p.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name == "StateAttribute")
@@ -261,7 +281,7 @@ public sealed partial class Codegen
     {
         if (target == null && (cur.This == null || Kind(p.ContainingType) != VK.Ref)) return false;
         var k = target == null ? VK.Ref : Kind(cur.Model.GetTypeInfo(target.Expression).Type);
-        if (k is VK.Block or VK.Button or VK.Text)
+        if (k is VK.Block or VK.Button or VK.Text or VK.Gui or VK.Item)
         {
             if (!a.IsKind(SyntaxKind.SimpleAssignmentExpression)) throw new UnsupportedException(a, "Only '=' is supported here.");
             SetObjProp(EvalLibObject(target.Expression, k), p, a.Right);
@@ -284,6 +304,7 @@ public sealed partial class Codegen
 
     Operand? TryLibPropertyGet(IPropertySymbol p, MemberAccessExpressionSyntax? ma, VK kind)
     {
+        if (Kind(p.ContainingType) == VK.Gui) return GuiGet(p, ma);
         if (Kind(p.ContainingType) != VK.Ref) return null;
         var pl = ma == null ? Resolve(ThisRef(cur.Info.Decl)) : GetRef(ma.Expression);
         string t = Temp();
@@ -294,7 +315,7 @@ public sealed partial class Codegen
         }
         var (path, _, _) = PropInfo(p);
         if (path == null) throw new UnsupportedException(ma, $"{p.Name} cannot be read.");
-        Emit($"execute store result score {t} run data get entity {SelWith(pl.Selector, "limit=1")} {path} {(kind == VK.Fixed ? Scale : 1)}");
+        Emit($"execute store result score {t} run data get entity {SelWith(pl.Selector, "limit=1")} {path} {ScaleOf(kind)}");
         return new ScoreOp(t);
     }
 
@@ -384,6 +405,7 @@ public sealed partial class Codegen
         RefVar Recv() => inv.Expression is MemberAccessExpressionSyntax rma ? GetRef(rma.Expression) : Resolve(ThisRef(inv));
         Operand Store(string mode, string tail, params Pos[] ps) { var t = Temp(); Emit($"scoreboard players set {t} 0"); EmitCmd($"execute store {mode} score {t} {tail}", inv, ps); return new ScoreOp(t); }
 
+        if (name.StartsWith("gui.") || name.StartsWith("board.") || name.StartsWith("bossbar.")) return EmitGui(name, inv);
         switch (name)
         {
             // ---------------- world
@@ -428,7 +450,11 @@ public sealed partial class Codegen
             {
                 string block = BlockArg(Arg(0), name == "block.setobj");
                 var pos = EvalPos(Arg(1));
-                return Store("success", $"{pos.ExecPrefix}run setblock {pos.Coords} {block}", pos);
+                if (name == "block.set") return Store("success", $"{pos.ExecPrefix}run setblock {pos.Coords} {block}", pos);
+                string t = Temp();
+                Emit($"scoreboard players set {t} 0");
+                Consume(Arg(0), EvalLibObject(Arg(0), VK.Block), inv, () => { var r = Store("success", $"{pos.ExecPrefix}run setblock {pos.Coords} {block}", pos); Emit($"scoreboard players operation {t} = {((ScoreOp)r).Holder}"); });
+                return new ScoreOp(t);
             }
             case "block.fill" or "block.fillobj":
             {
@@ -437,7 +463,12 @@ public sealed partial class Codegen
                 string prefix = from.Prefix.Length > 0 ? from.Prefix : to.Prefix;
                 if (from.Prefix.Length > 0 && to.Prefix.Length > 0 && from.Prefix != to.Prefix)
                     throw new UnsupportedException(inv, "FillBlock: both corners must be relative to the same position (e.g. p and p.Offset(...)) or absolute.");
-                return Store("success", $"{(prefix.Length > 0 ? prefix + " " : "")}run fill {from.Coords} {to.Coords} {block}", from, to);
+                string cmd = $"{(prefix.Length > 0 ? prefix + " " : "")}run fill {from.Coords} {to.Coords} {block}";
+                if (name == "block.fill") return Store("success", cmd, from, to);
+                string t = Temp();
+                Emit($"scoreboard players set {t} 0");
+                Consume(Arg(0), EvalLibObject(Arg(0), VK.Block), inv, () => { var r = Store("success", cmd, from, to); Emit($"scoreboard players operation {t} = {((ScoreOp)r).Holder}"); });
+                return new ScoreOp(t);
             }
             case "block.is" or "block.isobj":
             {

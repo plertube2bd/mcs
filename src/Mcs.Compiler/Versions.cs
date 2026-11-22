@@ -28,6 +28,8 @@ public sealed record TargetProfile(McVersion First, McVersion Last)
     public bool ItemPredicates => Format >= 41;
     /// Text components: click_event/hover_event, run_command uses "command" (1.21.5+)
     public bool NewTextComponents => Format >= 71;
+    /// Scoreboard display slot: belowName (≤1.20.1) → below_name (1.20.2+)
+    public string BelowNameSlot => Format >= 18 ? "below_name" : "belowName";
 
     /// #if symbols: MC_<v>_OR_GREATER for the first version of each group up to and including this one
     public IEnumerable<string> Symbols => Versions.Groups.TakeWhile(g => g.Format <= Format).Select(g => g.First.Symbol);

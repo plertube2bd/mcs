@@ -173,7 +173,7 @@ public static class Compiler
         foreach (var g in groups)
         {
             var parseOpts = CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Latest).WithPreprocessorSymbols(g.Symbols);
-            var userTrees = pre.Select(p => CSharpSyntaxTree.ParseText(p.Item2, parseOpts, p.path)).ToList();
+            var userTrees = MountRewriter.Apply(pre.Select(p => CSharpSyntaxTree.ParseText(p.Item2, parseOpts, p.path)).ToList());
             var trees = new List<SyntaxTree>(userTrees);
             trees.AddRange(preludeTrees);
             var comp = CSharpCompilation.Create("mcs_user", trees, refs,

@@ -255,10 +255,10 @@ public sealed partial class Codegen
                 sb.Append($"$({name})"); force = true;
                 continue;
             }
-            if (k is VK.Int or VK.Fixed or VK.Bool)
+            if (k is VK.Int or VK.Fixed or VK.Double or VK.Bool)
             {
                 var op = EvalNum(x, k);
-                if (op is ConstOp co && k != VK.Fixed) { sb.Append(co.Value); continue; }
+                if (op is ConstOp co && !IsFrac(k)) { sb.Append(co.Value); continue; }
                 string name = $"a{args.Count}";
                 args.Add((name, op, k)); sb.Append($"$({name})");
                 continue;
@@ -364,7 +364,7 @@ public sealed partial class Codegen
         runtimeArrays.Add(f);
         var t = Temp();
         var k = Kind(((IArrayTypeSymbol)f.Type).ElementType);
-        cur.Sink.AddRange(MacroCmd($"execute store result score {t} run data get storage {Storage} {ArrayPath(f)}[$(i)] {(k == VK.Fixed ? Scale : 1)}", at, ("i", idx, VK.Int)));
+        cur.Sink.AddRange(MacroCmd($"execute store result score {t} run data get storage {Storage} {ArrayPath(f)}[$(i)] {ScaleOf(k)}", at, ("i", idx, VK.Int)));
         return new ScoreOp(t);
     }
 
@@ -392,6 +392,7 @@ public sealed partial class Codegen
     // ================================================================ foreach
     void EmitForEach(ForEachStatementSyntax fe)
     {
+        if (ContainsWait(fe)) throw new UnsupportedException(fe, "Wait() cannot be used inside foreach.");
         var loopSym = cur.Model.GetDeclaredSymbol(fe)!;
         if (UnrollValues(fe.Expression) is List<Var> values)
         {
@@ -401,8 +402,9 @@ public sealed partial class Codegen
             foreach (var v in values) { cur.Locals[loopSym] = v; EmitStmt(fe.Statement); }
             return;
         }
+        if (ArrOf(fe.Expression) is ArrVar fa) { EmitArrayForEach(fe, fa, (ILocalSymbol)loopSym); return; }
         if (fe.Expression is not InvocationExpressionSyntax src || cur.Model.GetSymbolInfo(src).Symbol is not IMethodSymbol m || Intrinsic(m) != "ents.all")
-            throw new UnsupportedException(fe.Expression, "foreach works over Entities.All<T>(...), Unroll.Range(...) or a static readonly array.");
+            throw new UnsupportedException(fe.Expression, "foreach works over Entities.All<T>(...), Unroll.Range(...), an array or a static readonly array.");
         var args = src.ArgumentList.Arguments;
         var t = m.TypeArguments[0];
         string sel = ClassOf(t)!.BaseSelector;
@@ -438,6 +440,7 @@ public sealed partial class Codegen
     // ================================================================ switch
     void EmitSwitch(SwitchStatementSyntax sw)
     {
+        if (ContainsWait(sw)) throw new UnsupportedException(sw, "Wait() cannot be used inside switch.");
         var v = EvalNum(sw.Expression, VK.Int);
         var sections = sw.Sections.Select(s => (s, values: s.Labels.OfType<CaseSwitchLabelSyntax>().Select(l => ConstSlot(l.Value)).ToList(),
             isDefault: s.Labels.Any(l => l is DefaultSwitchLabelSyntax), stmts: Body(s))).ToList();
@@ -450,14 +453,20 @@ public sealed partial class Codegen
         }
         string t = ToTemp(v);
         var all = sections.SelectMany(x => x.values).ToList();
+        var objectsBefore = cur.SaveObjects();
+        var objectsAfter = new List<(Dictionary<Var, SyntaxNode>, Dictionary<Var, SyntaxNode>)>();
         foreach (var (s, values, isDefault, stmts) in sections)
         {
+            cur.RestoreObjects(objectsBefore);
             var cmds = Capture(() => EmitStatements(stmts));
+            objectsAfter.Add(cur.SaveObjects());
             if (cmds.Count == 0) continue;
             string cmd = cmds.Count == 1 ? cmds[0] : $"function {NewSub("case", cmds)}";
             if (isDefault) EmitGuarded(string.Join(" ", all.Where(x => !values.Contains(x)).Select(x => $"unless score {t} matches {x}")) is { Length: > 0 } g ? g : "if score " + t + " matches -2147483648..", new() { cmd }, "case");
             else foreach (var x in values) EmitGuarded($"if score {t} matches {x}", new() { cmd }, "case");
         }
+        cur.RestoreObjects(objectsBefore);
+        foreach (var o in objectsAfter) cur.MergeObjects(o);
 
         static List<StatementSyntax> Body(SwitchSectionSyntax s)
         {
@@ -493,10 +502,11 @@ public sealed partial class Codegen
                 val = k switch
                 {
                     VK.String => new StrVar(ConstString(x)),
-                    VK.Int or VK.Bool or VK.Fixed => EvalNum(x, k) is ConstOp c ? new ConstVar(c.Value) : new ScoreVar(ToTemp(EvalNum(x, k)), k),
+                    VK.Int or VK.Bool or VK.Fixed or VK.Double => EvalNum(x, k) is ConstOp c ? new ConstVar(c.Value) : new ScoreVar(ToTemp(EvalNum(x, k)), k),
                     VK.Position => new PosVar(EvalPos(x)),
                     VK.Ref => Resolve(GetRef(x)),
-                    VK.Block or VK.Button or VK.Text => EvalLibObject(x, k),
+                    VK.Block or VK.Button or VK.Text or VK.Gui or VK.Item => EvalLibObject(x, k),
+                    VK.Array => GetArr(x),
                     _ => throw new UnsupportedException(x, $"Unsupported [Inline] parameter type: {p.Type}"),
                 };
             }
@@ -515,14 +525,15 @@ public sealed partial class Codegen
                 if (stmts.Count > 0 && stmts[^1] is ReturnStatementSyntax rs) { ret = rs.Expression; stmts.RemoveAt(stmts.Count - 1); }
                 if (stmts.SelectMany(s => s.DescendantNodesAndSelf()).Any(n => n is ReturnStatementSyntax))
                     throw new UnsupportedException(decl, "[Inline] methods may only return at the end.");
+                if (stmts.Any(ContainsWait)) throw new UnsupportedException(decl, "[Inline] methods cannot use Wait().");
                 EmitStatements(stmts);
             }
             if (ret != null)
             {
                 var rk = Kind(m.ReturnType);
                 if (rk == VK.String) strResult = ConstString(ret);
-                else if (rk is VK.Int or VK.Bool or VK.Fixed) result = EvalNum(ret, rk);
-                else if (rk is VK.Button or VK.Text or VK.Block or VK.Ref) objResult = EvalLibObject(ret, rk);
+                else if (rk is VK.Int or VK.Bool or VK.Fixed or VK.Double) result = EvalNum(ret, rk);
+                else if (rk is VK.Button or VK.Text or VK.Block or VK.Ref or VK.Gui or VK.Item) objResult = EvalLibObject(ret, rk);
                 else if (rk == VK.Void) EmitExprStatement(ret);
             }
         }
