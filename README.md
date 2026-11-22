@@ -80,3 +80,7 @@ Block/item/entity/effect IDs are validated per target version. See the [library 
 - Runtime attribute values (`x.maxHealth = hp;`) need 1.20.2+ (macros).
 - Scoreboard division rounds toward negative infinity (it differs from C# for negative numbers).
 - `GetWorldSpawn()` uses a marker placed at load time. If `/setworldspawn` changes the spawn, run `/reload`.
+
+## License
+
+[MIT](LICENSE)
