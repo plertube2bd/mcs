@@ -24,7 +24,9 @@ output is a readable trace of what the datapack would do. Errors Minecraft would
 import argparse
 import json
 import os
+import math
 import re
+import struct
 import sys
 
 MAX_CHAIN = 65536          # gamerule maxCommandChainLength
@@ -466,6 +468,8 @@ class Sim:
             return len(ents)
         if head == 'bossbar':
             return self.bossbar(t, cmd)
+        if head == 'compute':
+            return self.compute(cmd, ctx)
         if head == 'time' and t[1:3] == ['query', 'gametime']:
             return self.tick
         if head == 'advancement':                   # rewards are triggered by actions; granting/revoking is a no-op
@@ -483,6 +487,111 @@ class Sim:
             return len(players)
         self.log(cmd)
         return 1
+
+    # ---- compute (26.3+)
+    def compute(self, cmd, ctx):
+        """compute default integer|float <provider> [scale] — like the game: float math in 32 bits, int nodes
+        checked against the int range, result floor(value × scale); failures return 0 silently."""
+        m = re.match(r'compute default (integer|float) ', cmd)
+        if not m:
+            self.log(cmd)
+            return 1
+        rest = cmd[m.end():]
+        end = snbt_end(rest)
+        prov, scale = Snbt.parse(rest[:end]), rest[end:].strip()
+        try:
+            if m.group(1) == 'integer':
+                return self.int_provider(prov, ctx)
+            v = f32(self.float_provider(prov, ctx) * f32(float(scale) if scale else 1.0))
+            if v != v or v in (float('inf'), float('-inf')):
+                return 0
+            return max(-2**31, min(2**31 - 1, math.floor(v)))
+        except ArithmeticError:
+            return 0
+
+    def _ref(self, p):
+        if isinstance(p, str):
+            raise ArithmeticError(f'provider references ({p}) are not simulated')
+        return p
+
+    def int_provider(self, p, ctx):
+        if isinstance(p, (int, float)):
+            return int(p)
+        p = self._ref(p)
+        t = p['type'].replace('minecraft:', '')
+        I = lambda q: self.int_provider(q, ctx)
+
+        def safe(v):
+            if not -2**31 <= v < 2**31:
+                raise ArithmeticError(f"Value {v} can't be safely converted to int")
+            return v
+        if t == 'constant':
+            return int(p['value'])
+        if t == 'score':
+            tg = p['target']
+            h = tg.get('name') if isinstance(tg, dict) and tg.get('type', '').endswith('fixed') else (ctx.holder if ctx else None)
+            return self.scores.get((h, p['score']), 0)
+        if t in ('add', 'mul'):
+            vals = [I(q) for q in p['inputs']]
+            return safe(sum(vals) if t == 'add' else math.prod(vals))
+        if t == 'sub':
+            return safe(I(p['left']) - I(p['right']))
+        if t in ('div', 'mod', 'floor_div', 'floor_mod'):
+            a, b = I(p['left']), I(p['right'])
+            if b == 0:
+                raise ArithmeticError('/ by zero')
+            q = abs(a) // abs(b) * (1 if (a < 0) == (b < 0) else -1)       # Java idiv
+            if t == 'div':
+                return wrap(q)
+            if t == 'mod':
+                return a - b * q
+            if t == 'floor_div':
+                return safe(a // b)
+            return a % b
+        if t in ('min', 'max'):
+            return (min if t == 'min' else max)(I(q) for q in p['inputs'])
+        if t == 'negate':
+            return safe(-I(p['input']))
+        if t == 'abs':
+            return safe(abs(I(p['input'])))
+        if t == 'from_float':
+            v = self.float_provider(p['input'], ctx)
+            return int(v) if v == v else 0
+        raise ArithmeticError(f'int provider {t} is not simulated')
+
+    def float_provider(self, p, ctx):
+        if isinstance(p, (int, float)):
+            return f32(float(p))
+        p = self._ref(p)
+        t = p['type'].replace('minecraft:', '')
+        F = lambda q: self.float_provider(q, ctx)
+        if t == 'constant':
+            return f32(float(p['value']))
+        if t == 'from_int':
+            return f32(float(self.int_provider(p['input'], ctx)))
+        if t in ('add', 'mul'):
+            acc = f32(0.0 if t == 'add' else 1.0)
+            for q in p['inputs']:
+                acc = f32(acc + F(q) if t == 'add' else acc * F(q))
+            return acc
+        if t == 'sub':
+            return f32(F(p['left']) - F(p['right']))
+        if t == 'div':
+            a, b = F(p['left']), F(p['right'])
+            return f32(a / b) if b else (float('nan') if a == 0 else math.copysign(float('inf'), a) * (1 if math.copysign(1, b) > 0 else -1))
+        if t in ('floor', 'ceil'):
+            v = F(p['input'])
+            return f32(float((math.floor if t == 'floor' else math.ceil)(v)))
+        if t in ('sin', 'cos'):
+            return mth_sin(F(p['input']), t == 'cos')
+        if t == 'negate':
+            return -F(p['input'])
+        if t == 'abs':
+            return abs(F(p['input']))
+        if t == 'sqrt':
+            v = F(p['input'])
+            return f32(math.sqrt(v)) if v >= 0 else float('nan')
+        raise ArithmeticError(f'float provider {t} is not simulated')
 
     # ---- scoreboard
     def need_obj(self, obj):
@@ -1003,6 +1112,50 @@ def item_matches(item, pred):
         if not (nbt_matches(want, item['custom']) if mm.group(1) == '~' else want == item['custom']):
             return False
     return True
+
+
+def f32(x):
+    """Round to a 32-bit float (Java float arithmetic)."""
+    try:
+        return struct.unpack('f', struct.pack('f', x))[0]
+    except OverflowError:
+        return math.copysign(float('inf'), x)
+
+
+_SIN = None
+
+
+def mth_sin(x, cos=False):
+    """net.minecraft.util.Mth.sin/cos: a 65536-entry float table indexed by (long)(x·10430.378…) & 65535."""
+    global _SIN
+    if _SIN is None:
+        _SIN = [f32(math.sin(i / 10430.378350470453)) for i in range(65536)]
+    v = x * 10430.378350470453 + (16384.0 if cos else 0.0)
+    return _SIN[int(v) & 65535]                       # int() truncates toward zero, like d2l
+
+
+def snbt_end(s):
+    """Length of the SNBT value at the start of s (a compound/list, or a bare word)."""
+    depth, quote, i = 0, None, 0
+    while i < len(s):
+        ch = s[i]
+        if quote:
+            if ch == '\\':
+                i += 1
+            elif ch == quote:
+                quote = None
+        elif ch in '"\'':
+            quote = ch
+        elif ch in '{[':
+            depth += 1
+        elif ch in '}]':
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        elif ch == ' ' and depth == 0:
+            return i
+        i += 1
+    return len(s)
 
 
 def item_pred_matches(item, pred):

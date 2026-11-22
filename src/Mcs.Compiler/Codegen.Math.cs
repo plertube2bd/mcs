@@ -49,6 +49,11 @@ public sealed partial class Codegen
             double r = name switch { "math.sin" => Math.Sin(v), "math.cos" => Math.Cos(v), _ => Math.Tan(v) };
             return new ConstOp(ScaleConst(r, rk));
         }
+        if (UseCompute)
+        {
+            Emit($"execute store result score {MH("r")} run compute default float {TrigExpr(name[5..], x)} 65536");
+            return Convert(new ScoreOp(ToTemp(new ScoreOp(MH("r")))), VK.Double, rk, inv);
+        }
         SetHolder(MH("x"), x);
         Emit($"function {MathFn(name[5..])}");
         return Convert(new ScoreOp(ToTemp(new ScoreOp(MH("r")))), VK.Double, rk, inv);
@@ -127,6 +132,7 @@ public sealed partial class Codegen
             f.Add(Op(S("a"), "*=", C(65536)));
             f.Add(Op(S("a"), "+=", S("f")));
             fns["ddiv_f"] = f;
+            if (UseCompute) { fns["ddiv_slow"] = fns["ddiv"]; fns["ddiv"] = ComputeDDiv($"{ns}:__math/ddiv_slow"); }
         }
         foreach (var (fn, op) in new[] { ("idiv", "/="), ("irem", "%=") })
         {

@@ -100,6 +100,7 @@ Build succeeded: out/versions (Minecraft 1.20.1 – 26.3)
 | 1.21.2+ | Attribute IDs lose `generic.`; `boat` → `oak_boat` | Writes the right IDs |
 | 1.21.9+ | `pack.mcmeta` uses `min_format`/`max_format` | Writes the right fields |
 | 1.21.9+ | Spawn chunks removed (nothing is loaded when `#load` runs) | If `GetWorldSpawn()` is used or the pack summons entities / places blocks, force-loads the spawn chunk and starts `Main` once it's loaded |
+| 26.3+ | `/compute` (number-provider expressions) | `double` `*` `/`, C# `int` `/` `%` and `Math.Sin/Cos/Tan` become single commands instead of helper functions |
 
 ### Branching in your code (`#if`)
 
@@ -235,7 +236,7 @@ python3 tools/mcsim.py out/hello --format 15   # as 1.20.1
 python3 tools/mcsim.py out/hello --ticks 100
 ```
 
-- **Simulated:** scoreboards (32-bit wraparound, floor division), data storage and function macros, `function` / `schedule` / `#tick` / `#load`, `execute` (`if`/`unless score|entity|data`, `as`, `store …`), `tellraw` / `say`, a small entity model (`summon`, `tag`, `kill`, selectors with `type=`, `tag=`, `name=`, `scores=`, `limit=`), and scripted players. `maxCommandChainLength` is enforced, so endless loops show up.
+- **Simulated:** scoreboards (32-bit wraparound, floor division), data storage and function macros, `compute` (26.3: 32-bit float math and the game's sine table, bit-for-bit), `function` / `schedule` / `#tick` / `#load`, `execute` (`if`/`unless score|entity|data`, `as`, `store …`), `tellraw` / `say`, a small entity model (`summon`, `tag`, `kill`, selectors with `type=`, `tag=`, `name=`, `scores=`, `limit=`), and scripted players. `maxCommandChainLength` is enforced, so endless loops show up.
 - **Not simulated:** blocks, positions, entity NBT (players exist only when scripted). Such commands are printed as `> <command>`, so the output doubles as a trace. Commands that Minecraft would reject print as `! <error>`.
 - Tick order follows the game: `#tick` functions first, then scheduled functions.
 - **Scripted players** (`--do "TICK ACTION"` or `// @do` in tests; tick 0 = before load): `join NAME`, `leave NAME`, `die NAME`, `respawn NAME`, `kill NAME` (NAME killed something), `use NAME ITEM`, `stat NAME CRITERION [N]`, `trigger NAME OBJECTIVE [set|add N]`, `click NAME` (right-click with the held item), `hold NAME SLOT`, `offhand NAME SLOT`. Players have inventories (`/give` fills them; `if items` and `nbt={SelectedItem:…}` read them). Statistics update every objective with that criterion, `/trigger` needs `enable`, `@e` skips dead players, and messages to specific players print as `to Steve: …`.

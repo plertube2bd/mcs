@@ -368,6 +368,7 @@ How it works:
 - Constant arguments are computed at compile time.
 - `double * double` and `double / double` need more than 32 bits, so they call shared helpers (`<ns>:__math/dmul`, `__math/ddiv`) that split the operands into 16-bit halves (multiply) or do 16-step long division (divide). Multiplication is floored, division rounds toward zero (like C#), and both are exact; a division whose result does not fit saturates to ±2147483647/65536. Multiplying or dividing by a whole-number constant stays a single scoreboard operation.
 - The helpers and the table are only emitted when used.
+- **26.3+ (`/compute`):** the operations above become single commands that evaluate a number-provider expression — `double *` (≈5× faster), `double /` (≈11× faster when the divisor is below 128.0; larger divisors keep the long division), `int` `/` and `%` (≈2.7× faster) and `Sin`/`Cos`/`Tan` (≈13× faster). Results of `*`, `/` and `%` are bit-for-bit the same as on older versions. The trig functions read the game's own 65536-entry sine table and correct to first order, which is a bit more accurate (worst case about 1.6/65536 instead of 1.8/65536), so their last digit can differ from older versions. One difference: a `double` multiplication whose result does not fit (beyond ±32768) gives 0 on 26.3 instead of a wrapped value.
 
 ## ItemLib
 

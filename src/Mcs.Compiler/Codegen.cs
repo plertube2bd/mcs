@@ -803,6 +803,7 @@ public sealed partial class Codegen
             case '*' when kind == VK.Double:
                 // Q15.16 × Q15.16 needs a 48-bit intermediate: split into 16-bit halves (__math/dmul)
                 if (r is ConstOp dm && dm.Value % DScale == 0) Emit($"scoreboard players operation {h} *= {ConstHolder(dm.Value / DScale)}");
+                else if (UseCompute) ComputeInt(h, DMulExpr(new ScoreOp(h), r));
                 else CallMath2("dmul", h, r);
                 break;
             case '/' when kind == VK.Double:
@@ -837,6 +838,7 @@ public sealed partial class Codegen
                 else if (c.Value < 0) Emit($"scoreboard players operation {h} *= {ConstHolder(-1)}");
                 return;
             }
+            if (UseCompute) { ComputeTrunc(h, op, c); return; }
             // |h| op d, then put the sign back
             string s = Temp();
             Emit($"execute store success score {s} if score {h} matches ..-1");
@@ -846,6 +848,7 @@ public sealed partial class Codegen
             Emit($"execute if score {s} matches {(flipWhenNeg ? 1 : 0)} run scoreboard players operation {h} *= {ConstHolder(-1)}");
             return;
         }
+        if (UseCompute) { ComputeTrunc(h, op, r); return; }
         CallMath2(op == '/' ? "idiv" : "irem", h, r);
     }
 

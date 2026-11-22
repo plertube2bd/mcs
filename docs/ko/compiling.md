@@ -100,6 +100,7 @@ Build succeeded: out/versions (Minecraft 1.20.1 – 26.3)
 | 1.21.2+ | 속성 ID에서 `generic.` 제거, `boat` → `oak_boat` | 알맞은 ID로 출력 |
 | 1.21.9+ | `pack.mcmeta`가 `min_format`/`max_format` 사용 | 알맞은 필드로 출력 |
 | 1.21.9+ | 스폰 청크 삭제 (`#load` 실행 시점에 로드된 청크가 없음) | `GetWorldSpawn()`을 쓰거나 엔티티 소환·블록 설치를 하면 스폰 청크를 forceload하고, 로드가 끝난 뒤 `Main` 시작 |
+| 26.3+ | `/compute` (숫자 제공자 식) | `double` `*` `/`, C# `int` `/` `%`, `Math.Sin/Cos/Tan`이 도우미 함수 대신 명령 하나로 |
 
 ### 코드 안에서 분기하기 (`#if`)
 
@@ -235,7 +236,7 @@ python3 tools/mcsim.py out/hello --format 15   # 1.20.1 기준
 python3 tools/mcsim.py out/hello --ticks 100
 ```
 
-- **시뮬레이션하는 것:** 스코어보드(32비트 오버플로, 내림 나눗셈), data storage와 함수 매크로, `function` / `schedule` / `#tick` / `#load`, `execute`(`if`/`unless score|entity|data`, `as`, `store …`), `tellraw` / `say`, 간단한 엔티티 모델(`summon`, `tag`, `kill`, `type=` `tag=` `name=` `scores=` `limit=` 셀렉터), 스크립트로 넣는 플레이어. `maxCommandChainLength`도 적용해서 무한 루프가 드러납니다.
+- **시뮬레이션하는 것:** 스코어보드(32비트 오버플로, 내림 나눗셈), data storage와 함수 매크로, `compute`(26.3: 32비트 float 계산과 게임의 사인 표까지 비트 단위로 동일), `function` / `schedule` / `#tick` / `#load`, `execute`(`if`/`unless score|entity|data`, `as`, `store …`), `tellraw` / `say`, 간단한 엔티티 모델(`summon`, `tag`, `kill`, `type=` `tag=` `name=` `scores=` `limit=` 셀렉터), 스크립트로 넣는 플레이어. `maxCommandChainLength`도 적용해서 무한 루프가 드러납니다.
 - **하지 않는 것:** 블록, 위치, 엔티티 NBT (플레이어는 스크립트로 넣을 때만 존재). 이런 명령어는 `> <명령어>`로 출력되어 실행 기록 역할을 합니다. 마인크래프트가 거부할 명령어는 `! <오류>`로 출력됩니다.
 - 틱 순서는 게임과 같습니다: `#tick` 함수 먼저, 그다음 예약된 함수.
 - **플레이어 스크립트** (`--do "틱 행동"` 또는 테스트의 `// @do`, 0틱 = load 전): `join 이름`, `leave 이름`, `die 이름`, `respawn 이름`, `kill 이름`(그 플레이어가 무언가를 처치), `use 이름 아이템`, `stat 이름 criterion [N]`, `trigger 이름 objective [set|add N]`, `click 이름`(들고 있는 아이템으로 우클릭), `hold 이름 슬롯`, `offhand 이름 슬롯`. 플레이어는 인벤토리가 있습니다 (`/give`로 채워지고 `if items`, `nbt={SelectedItem:…}`로 읽힘). 통계는 해당 criterion의 모든 objective에 반영되고, `/trigger`는 `enable`이 필요하며, `@e`는 죽은 플레이어를 고르지 않고, 특정 플레이어에게 보낸 메시지는 `to Steve: …`로 출력됩니다.
