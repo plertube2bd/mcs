@@ -1,0 +1,6 @@
+[t0] fact(5)=120 fact(10)=3628800
+[t0] fib(10)=55 calls=177
+[t0] even(7)=False even(10)=True
+[t0] gcd(84,36)=12 gcd(17,5)=1
+[t0] pow(1.5,4)=5.06250
+[t0] tree(4)=31 sum=23

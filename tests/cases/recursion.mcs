@@ -1,0 +1,36 @@
+// Recursion: calls inside a call-graph cycle save the caller's scores on a storage stack.
+static int calls = 0;
+
+static int Fact(int n) { if (n <= 1) return 1; return n * Fact(n - 1); }
+static int Fib(int n) { calls++; if (n < 2) return n; return Fib(n - 1) + Fib(n - 2); }
+
+// mutual recursion
+static bool IsEven(int n) => n == 0 ? true : IsOdd(n - 1);
+static bool IsOdd(int n) => n == 0 ? false : IsEven(n - 1);
+
+// arguments that read the parameters being replaced
+static int Gcd(int a, int b) { if (b == 0) return a; return Gcd(b, a % b); }
+
+// recursion inside loops, locals that must survive the call, double and bool parameters
+static int[] xs = { 3, 1, 4, 1, 5, 9 };
+static int Sum(int i) => i >= xs.Length ? 0 : xs[i] + Sum(i + 1);
+static double Pow(double x, int n, bool half) {
+    if (n == 0) return 1.0;
+    double rest = Pow(x, n - 1, !half);
+    return half ? rest * x / 2.0 * 2.0 : rest * x;
+}
+static int Tree(int depth) {
+    if (depth == 0) return 1;
+    int total = 1;
+    for (int i = 0; i < 2; i++) { int child = Tree(depth - 1); total += child; }
+    return total;
+}
+
+public static void Main() {
+    m.Console.WriteLine($"fact(5)={Fact(5)} fact(10)={Fact(10)}");
+    m.Console.WriteLine($"fib(10)={Fib(10)} calls={calls}");
+    m.Console.WriteLine($"even(7)={IsEven(7)} even(10)={IsEven(10)}");
+    m.Console.WriteLine($"gcd(84,36)={Gcd(84, 36)} gcd(17,5)={Gcd(17, 5)}");
+    m.Console.WriteLine($"pow(1.5,4)={Pow(1.5, 4, true)}");
+    m.Console.WriteLine($"tree(4)={Tree(4)} sum={Sum(0)}");
+}

@@ -141,6 +141,20 @@ m.Console.WriteLine($"{Math.FloorDiv(a, 2)} {Math.FloorMod(a, 2)}"); // -4 1  (u
 - `float` / `double` division also rounds toward zero (to the last fixed-point digit), and `%` works the same way. `(int)x` on a `float`/`double` truncates toward zero, like C#.
 - Division by zero cannot throw: the value is left unchanged.
 
+## Recursion
+
+Methods can call themselves, directly or through other methods:
+
+```csharp
+static int Fact(int n) { if (n <= 1) return 1; return n * Fact(n - 1); }
+static bool IsEven(int n) => n == 0 ? true : IsOdd(n - 1);
+static bool IsOdd(int n) => n == 0 ? false : IsEven(n - 1);
+```
+
+- **How:** a method's variables live in fixed scores, so the compiler finds the cycles in the call graph and, for the calls inside a cycle only, saves the caller's scores (parameters, locals, temporaries) on a storage stack (`<ns>:mcs stack`) before the call and restores them after it. Other calls are unchanged.
+- **Cost:** about two commands per score of the method on every recursive call (save and restore). Everything runs in one tick, so deep recursion can hit `maxCommandChainLength` (65536 commands by default) — prefer loops for large inputs.
+- Recursive methods cannot use `Wait()`. Entity parameters (tags) are not saved, so don't rely on an entity parameter after a recursive call.
+
 ## Wait()
 
 `Wait()` pauses the current method for one tick; `Wait(n)` for `n` ticks. The rest of the method runs later through `/schedule`. **Only this method waits** — the caller continues immediately.

@@ -1,0 +1,8 @@
+// Wait() splits a method into scheduled parts, which cannot share the recursion stack.
+static void Countdown(int n) {
+    if (n == 0) return;
+    Wait();
+    Countdown(n - 1);
+}
+static void Main() { Countdown(3); }
+// @error Recursive methods cannot use Wait().

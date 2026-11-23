@@ -222,9 +222,22 @@ def nbt_set(root, path, value):
 
 def nbt_remove(root, path):
     toks = path_tokens(path)
-    parent = nbt_get(root, '.'.join(str(t) for t in toks[:-1])) if len(toks) > 1 else root
-    if isinstance(parent, dict) and toks[-1] in parent:
-        del parent[toks[-1]]
+    parent = root
+    for t in toks[:-1]:
+        if isinstance(t, int):
+            if not isinstance(parent, list) or not -len(parent) <= t < len(parent):
+                return 0
+        elif not isinstance(parent, dict) or t not in parent:
+            return 0
+        parent = parent[t]
+    last = toks[-1]
+    if isinstance(last, int):
+        if isinstance(parent, list) and -len(parent) <= last < len(parent):
+            del parent[last]
+            return 1
+        return 0
+    if isinstance(parent, dict) and last in parent:
+        del parent[last]
         return 1
     return 0
 

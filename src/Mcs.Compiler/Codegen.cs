@@ -169,6 +169,8 @@ public sealed partial class Codegen
 
         CollectClickObjects();   // before any item stack is generated
 
+        FindRecursion();
+
         // 2. Generate functions
         foreach (var info in fns.Values)
         {
@@ -184,6 +186,7 @@ public sealed partial class Codegen
         FinishMath();
         FinishGui(load);
         FinishObjects(load);
+        FinishFrames(load);
         CollectEvents();
         FinishEvents(load);
         foreach (var obj in mountObjectives) load.Add($"scoreboard objectives add {obj} dummy");
@@ -1186,12 +1189,29 @@ public sealed partial class Codegen
         if (!fns.TryGetValue(sym.OriginalDefinition, out var callee))
             throw new UnsupportedException(inv, $"'{sym.ContainingType?.Name}.{sym.Name}' cannot be used in MC# (not available inside Minecraft).");
         var args = inv.ArgumentList.Arguments;
+        bool rec = IsRecursiveCall(callee.Sym);
+        if (rec)
+        {
+            if (cur.Info.Decl.Body != null && ContainsWait(cur.Info.Decl.Body) || callee.Decl.Body != null && ContainsWait(callee.Decl.Body))
+                throw new UnsupportedException(inv, "Recursive methods cannot use Wait().");
+            // Arguments first (they may read the parameters this call overwrites), then save this frame
+            var vals = new Operand?[args.Count];
+            for (int i = 0; i < args.Count; i++)
+                if (callee.Params[sym.Parameters[i].OriginalDefinition] is ScoreVar sv)
+                {
+                    if (sv.Kind == VK.Bool) { string t = Temp(); StoreCond(t, EvalCond(args[i].Expression)); vals[i] = new ScoreOp(t); }
+                    else { var v = EvalNum(args[i].Expression, sv.Kind); vals[i] = v is ScoreOp so ? new ScoreOp(ToTemp(so)) : v; }
+                }
+            Emit($"function {FrameFn("save")}");
+            for (int i = 0; i < args.Count; i++)
+                if (vals[i] != null) SetHolder(((ScoreVar)callee.Params[sym.Parameters[i].OriginalDefinition]).Holder, vals[i]!);
+        }
         for (int i = 0; i < args.Count; i++)
         {
             var p = sym.Parameters[i];
             switch (callee.Params[p.OriginalDefinition])
             {
-                case ScoreVar sv: AssignHolder(sv, args[i].Expression); break;
+                case ScoreVar sv: if (!rec) AssignHolder(sv, args[i].Expression); break;
                 case EntVar ev:
                     var src = GetEnt(args[i].Expression);
                     Emit($"tag @e[tag={ev.Tag}] remove {ev.Tag}");
@@ -1209,6 +1229,7 @@ public sealed partial class Codegen
             var recv = inv.Expression is MemberAccessExpressionSyntax rma ? GetRef(rma.Expression) : ThisRef(inv);
             Emit(recv.Selector == "@s" ? $"function {callee.Path}" : $"execute as {recv.Selector} at @s run function {callee.Path}");
         }
+        if (rec) Emit($"function {FrameFn("restore")}");
         if (!want || sym.ReturnsVoid || Kind(sym.ReturnType) == VK.Ref) return null;
         return new ScoreOp(ToTemp(new ScoreOp(callee.Ret)));
     }

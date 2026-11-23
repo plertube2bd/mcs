@@ -82,7 +82,7 @@ Methods and fields can be written at the top level without a class. They are wra
 Block/item/entity/effect IDs are validated per target version. See the [library reference](docs/libraries.md).
 
 ## Limitations (current version)
-- **No recursion**: variables are static per function.
+- Recursion works through a storage stack, but every recursive call costs a few commands per variable; deep recursion can hit `maxCommandChainLength`.
 - Plain (non-entity) instance classes and runtime strings are not supported. Arrays have a compile-time length.
 - Runtime attribute values (`x.maxHealth = hp;`) need 1.20.2+ (macros).
 - Objects (entity / block / item) are single use: spawning, placing or giving one twice is a compile error (or skipped at run time in loops); use `.Clone()`.
