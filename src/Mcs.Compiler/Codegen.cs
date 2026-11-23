@@ -523,13 +523,19 @@ public sealed partial class Codegen
                 break;
             case VK.Entity:
                 if (init == null) { cur.Locals[sym] = new EntVar(EntityTag(sym.Name)); break; }
-                if (init is BaseObjectCreationExpressionSyntax oc && Intrinsic(cur.Model.GetSymbolInfo(oc).Symbol) == "entity.new")
+                if (init is BaseObjectCreationExpressionSyntax oc && Intrinsic(cur.Model.GetSymbolInfo(oc).Symbol) is ("entity.new" or "display.new") and var ctor)
                 {
-                    var arg = oc.ArgumentList!.Arguments[0].Expression;
-                    if (cur.Model.GetSymbolInfo(arg).Symbol is not IFieldSymbol ef)
-                        throw new UnsupportedException(arg, "The entity type must be a constant (e.g. EntityType.Zombie).");
-                    cur.Locals[sym] = new EntVar(EntityTag(sym.Name)) { TypeId = ResolveId("entities", McIdOf(ef) ?? Snake(ef.Name), arg) };
-                    RegisterObject(cur.Locals[sym], sym, at);
+                    var nev = new EntVar(EntityTag(sym.Name));
+                    if (ctor == "entity.new")
+                    {
+                        var arg = oc.ArgumentList!.Arguments[0].Expression;
+                        if (cur.Model.GetSymbolInfo(arg).Symbol is not IFieldSymbol ef)
+                            throw new UnsupportedException(arg, "The entity type must be a constant (e.g. EntityType.Zombie).");
+                        nev.TypeId = ResolveId("entities", McIdOf(ef) ?? Snake(ef.Name), arg);
+                    }
+                    cur.Locals[sym] = nev;
+                    RegisterObject(nev, sym, at);
+                    InitEntityObject(nev, oc);
                 }
                 else if (IsCloneCall(init, out var cloneSrc))
                 {
@@ -1248,6 +1254,9 @@ public sealed partial class Codegen
             case "entity.kill":
                 Emit($"kill {Sel(Receiver(inv))}");
                 return null;
+            case "display.animate":
+                EmitAnimate(Receiver(inv), args[0].Expression);
+                return null;
             case "entity.tp":
             {
                 var ev = Receiver(inv);
@@ -1336,7 +1345,9 @@ public sealed partial class Codegen
 
     void EmitEntitySet(EntVar ev, IPropertySymbol p, ExpressionSyntax value)
     {
+        CheckSince(p, value);
         var (path, type, attr) = PropInfo(p);
+        if (path != null && IsDisplayNbtType(type!)) { EmitDisplaySet(ev, p, path, type!, value); return; }
         var kind = Kind(p.Type);
         var cv = cur.Model.GetConstantValue(value);
         string cmd;
@@ -1385,7 +1396,11 @@ public sealed partial class Codegen
 
     Operand EntityGet(EntVar ev, IPropertySymbol p, VK kind, SyntaxNode at)
     {
+        CheckSince(p, at);
         var (path, type, attr) = PropInfo(p);
+        if (type == "brightness") path += ".block";
+        else if (type == "scale3") path += "[0]";
+        else if (type != null && IsDisplayNbtType(type)) throw new UnsupportedException(at, $"{p.Name} cannot be read.");
         string scale = ScaleOf(kind).ToString();
         string t = Temp();
         if (path != null && type is not ("int[]" or "string"))
@@ -1399,6 +1414,7 @@ public sealed partial class Codegen
     static string NbtLiteral(object v, string type)
     {
         string n = FormatNum(v);
+        if (type == "byte" && v is int iv && iv is > 127 and < 256) n = (iv - 256).ToString();   // 0–255 → signed byte
         return type switch { "byte" => (v is bool b ? (b ? "1" : "0") : n) + "b", "short" => n + "s", "long" => n + "L", "float" => n + "f", "double" => n + "d", _ => n };
     }
 
@@ -1545,7 +1561,7 @@ public sealed partial class Codegen
         }
         if (t.TypeKind == TypeKind.Enum) return VK.Int;
         string? nsName = t.ContainingNamespace?.ToDisplayString();
-        if (t.Name == "Entity" && nsName == "EntityLib") return VK.Entity;
+        if (IsEntityType(t)) return VK.Entity;
         if (t.Name == "Position" && nsName == "MCS") return VK.Position;
         if (t.Name == "Button" && nsName == "TuiLib") return VK.Button;
         if (t.Name == "Text" && nsName == "TuiLib") return VK.Text;

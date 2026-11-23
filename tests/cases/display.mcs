@@ -1,0 +1,31 @@
+// DisplayLib: block / item / text displays (runtime text and rotation need macros: 1.20.2+).
+// @mc 1.20.2-26.3
+use DisplayLib;
+use BlockLib;
+use MathLib;
+
+static int score = 42;
+static double speed = 1.25;
+
+public static void Main() {
+    var label = new TextDisplay("Hello") { Billboard = Billboard.Center, Background = 0x40000000, TextOpacity = 200, Shadow = true };
+    m.SpawnEntityObject(label, Position.Here);
+    label.Text = $"Score: {score}  speed={speed} ok={score > 10}";
+    label.Alignment = TextAlignment.Left;
+
+    new Block : OakStairs stairs;
+    stairs.Facing = Facing.East;
+    var cube = new BlockDisplay(stairs) { Scale = 0.5f, Brightness = 15, RotationY = 45f };
+    m.SpawnEntityObject(cube, Position.Here);
+    float s = 2f;
+    float deg = 90f;
+    cube.Scale = s;
+    cube.RotationY = deg;
+    cube.Animate(20);
+    cube.Block = new Block("minecraft:stone");
+    m.Console.WriteLine($"scale read back: {cube.ScaleX}");
+
+    var gem = new ItemDisplay("diamond") { Mode = ItemDisplayMode.Ground, TeleportDuration = 5 };
+    m.SpawnEntityObject(gem.Clone(), Position.Here.Offset(0, 1, 0));
+    m.SpawnEntityObject(gem, Position.Here);
+}

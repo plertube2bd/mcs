@@ -325,6 +325,7 @@ class Entity:
         self.name = name             # players only
         self.alive = True
         self.inv = {}                # slot → {"id", "count", "custom"}; -106 = off hand
+        self.data = {}               # other entity NBT (summon NBT, data modify / store result entity)
         self.selected = 0
 
     @property
@@ -340,7 +341,8 @@ class Entity:
             if slot is not None:
                 d['Slot'] = slot
             return d
-        out = {'Tags': list(self.tags), 'Inventory': [item(it, s) for s, it in sorted(self.inv.items())]}
+        out = dict(self.data)
+        out.update({'Tags': list(self.tags), 'Inventory': [item(it, s) for s, it in sorted(self.inv.items())]})
         if self.selected in self.inv:
             out['SelectedItem'] = item(self.inv[self.selected])
         return out
@@ -719,6 +721,24 @@ class Sim:
             else:
                 self.log(cmd)
             return 1
+        if t[2] == 'entity' and t[1] in ('modify', 'get'):
+            sel, i = selector_at(t, 3)
+            ents = self.select(sel, None)
+            if not ents:
+                raise CommandError('No entity was found')
+            if t[1] == 'get':
+                v = nbt_get(ents[0].nbt(), t[i]) if len(t) > i else ents[0].nbt()
+                if v is None:
+                    raise CommandError(f'Found no elements matching {t[i]}')
+                self.log(cmd)
+                scale = float(t[i + 1]) if len(t) > i + 1 else 1.0
+                return int(math.floor(v * scale)) if isinstance(v, (int, float)) else len(v)
+            if t[i + 1] == 'set' and t[i + 2] == 'value':
+                value = Snbt.parse(cmd.split(' value ', 1)[1])
+                for e in ents:
+                    nbt_set(e.data, t[i], json.loads(json.dumps(value)))
+            self.log(cmd)
+            return 1
         if t[1] == 'remove' and t[2] == 'storage':
             return nbt_remove(self.storage.get(t[3], {}), t[4])
         if t[1] == 'get' and t[2] == 'storage':
@@ -727,7 +747,6 @@ class Sim:
                 raise CommandError(f'Found no elements matching {t[4]}')
             scale = float(t[5]) if len(t) > 5 else 1.0
             if isinstance(v, (int, float)):
-                import math
                 return int(math.floor(v * scale))
             return len(v)
         self.log(cmd)
@@ -753,11 +772,19 @@ class Sim:
     def summon(self, cmd, ctx):
         m = re.match(r'summon (\S+)(?: \S+ \S+ \S+)?(?: (.*))?$', cmd)
         etype = m.group(1)
-        tags = []
+        tags, data = [], {}
         if m.group(2):
             nbt = Snbt.parse(m.group(2))
-            tags = nbt.get('Tags', []) if isinstance(nbt, dict) else []
-        self.entities.append(Entity(etype if ':' in etype else 'minecraft:' + etype, tags))
+            if isinstance(nbt, dict):
+                tags = nbt.pop('Tags', [])
+                data = nbt
+        etype = etype if ':' in etype else 'minecraft:' + etype
+        e = Entity(etype, tags)
+        if etype.endswith('_display'):          # what display entities save from the start
+            e.data = {'transformation': {'left_rotation': [0.0, 0.0, 0.0, 1.0], 'right_rotation': [0.0, 0.0, 0.0, 1.0],
+                                         'translation': [0.0, 0.0, 0.0], 'scale': [1.0, 1.0, 1.0]}}
+        e.data.update(data)
+        self.entities.append(e)
         self.log(cmd)
         return 1
 
@@ -872,9 +899,9 @@ class Sim:
                     stores.append((mode, 'bossbar', t[i + 3], t[i + 4]))
                     i += 5
                 elif t[i + 2] == 'entity':
-                    stores.append((mode, 'entity', cmd))
-                    _, i = selector_at(t, i + 3)
-                    i += 3
+                    sel, j = selector_at(t, i + 3)
+                    stores.append((mode, 'entity', cmd, sel, t[j], t[j + 1], float(t[j + 2])))
+                    i = j + 3
                 else:
                     self.log(cmd)
                     return 0
@@ -907,6 +934,10 @@ class Sim:
                 self.bossbars.setdefault(s[2], {})[s[3]] = int(v)
                 self.log(f'bossbar set {s[2]} {s[3]} {int(v)}  (stored)')
             elif s[1] == 'entity':
+                val = v * s[6]
+                val = float(val) if s[5] in ('float', 'double') else int(val)
+                for e in self.select(s[3], ctx):
+                    nbt_set(e.data, s[4], val)
                 self.log(s[2])
         return result
 

@@ -39,6 +39,10 @@ public static class Prelude
             [System.AttributeUsage(System.AttributeTargets.Class)]
             public sealed class EntityAttribute : System.Attribute { public EntityAttribute(string type, string tag = null) { } }
 
+            /// The member exists from this data pack format / version on (older targets are a compile error).
+            [System.AttributeUsage(System.AttributeTargets.All)]
+            public sealed class SinceAttribute : System.Attribute { public SinceAttribute(int format, string version) { } }
+
             /// Per-entity scoreboard field. Default objective: <namespace>.<field_name>
             [System.AttributeUsage(System.AttributeTargets.Field)]
             public sealed class ScoreAttribute : System.Attribute
@@ -170,9 +174,10 @@ public static class Prelude
 
         namespace EntityLib
         {
-            public sealed class Entity
+            public class Entity
             {
                 [MCS.Intrinsic("entity.new")] public Entity(EntityType type) { }
+                protected Entity() { }
 
                 [MCS.Nbt("Health", "float")] public float Health { get; set; }
                 [MCS.McAttribute("max_health")] public float maxHealth { get; set; }
@@ -198,6 +203,85 @@ public static class Prelude
                 [MCS.Intrinsic("obj.clone")] public Entity Clone() => null;
                 /// Discards this object: it cannot be used any more.
                 [MCS.Intrinsic("obj.dispose")] public void Dispose() { }
+            }
+        }
+
+        namespace DisplayLib
+        {
+            public enum Billboard { Fixed, Vertical, Horizontal, Center }
+            public enum TextAlignment { Center, Left, Right }
+            public enum ItemDisplayMode
+            {
+                None,
+                [MCS.McId("thirdperson_lefthand")] ThirdPersonLeftHand, [MCS.McId("thirdperson_righthand")] ThirdPersonRightHand,
+                [MCS.McId("firstperson_lefthand")] FirstPersonLeftHand, [MCS.McId("firstperson_righthand")] FirstPersonRightHand,
+                Head, Gui, Ground, Fixed,
+            }
+
+            /// Common part of block, item and text displays (an entity: Kill, Teleport, Glowing … work too).
+            public abstract class Display : EntityLib.Entity
+            {
+                [MCS.Nbt("billboard", "enum")] public Billboard Billboard { get; set; }
+                [MCS.Nbt("view_range", "float")] public float ViewRange { get; set; }
+                [MCS.Nbt("shadow_radius", "float")] public float ShadowRadius { get; set; }
+                [MCS.Nbt("shadow_strength", "float")] public float ShadowStrength { get; set; }
+                [MCS.Nbt("width", "float")] public float Width { get; set; }
+                [MCS.Nbt("height", "float")] public float Height { get; set; }
+                [MCS.Nbt("glow_color_override", "int")] public int GlowColor { get; set; }
+                /// Light level 0–15 used instead of the light at the entity (block and sky light).
+                [MCS.Nbt("brightness", "brightness")] public int Brightness { get; set; }
+                /// Uniform scale (transformation)
+                [MCS.Nbt("transformation.scale", "scale3")] public float Scale { get; set; }
+                [MCS.Nbt("transformation.scale[0]", "float")] public float ScaleX { get; set; }
+                [MCS.Nbt("transformation.scale[1]", "float")] public float ScaleY { get; set; }
+                [MCS.Nbt("transformation.scale[2]", "float")] public float ScaleZ { get; set; }
+                /// Translation of the model relative to the entity (transformation)
+                [MCS.Nbt("transformation.translation[0]", "float")] public float OffsetX { get; set; }
+                [MCS.Nbt("transformation.translation[1]", "float")] public float OffsetY { get; set; }
+                [MCS.Nbt("transformation.translation[2]", "float")] public float OffsetZ { get; set; }
+                /// Rotation of the model in degrees: around the Y axis (counterclockwise seen from above), then around the X axis
+                [MCS.Nbt("transformation.left_rotation", "rot:0f,1f,0f")] public float RotationY { set { } }
+                [MCS.Nbt("transformation.right_rotation", "rot:1f,0f,0f")] public float RotationX { set { } }
+                /// Ticks over which changes to the transformation are animated (see Animate)
+                [MCS.Nbt("interpolation_duration", "int")] public int InterpolationDuration { get; set; }
+                [MCS.Nbt("start_interpolation", "int")] public int InterpolationDelay { get; set; }
+                /// Ticks over which teleports are smoothed (1.20.2+)
+                [MCS.Since(18, "1.20.2"), MCS.Nbt("teleport_duration", "int")] public int TeleportDuration { get; set; }
+                /// Animate the transformation changes made in this tick over `ticks` ticks.
+                [MCS.Intrinsic("display.animate")] public void Animate(int ticks) { }
+            }
+
+            public sealed class BlockDisplay : Display
+            {
+                [MCS.Intrinsic("display.new")] public BlockDisplay(BlockLib.Block block) { }
+                [MCS.Intrinsic("display.new")] public BlockDisplay(string block) { }
+                [MCS.Nbt("block_state", "block")] public BlockLib.Block Block { set { } }
+                [MCS.Intrinsic("obj.clone")] public new BlockDisplay Clone() => null;
+            }
+
+            public sealed class ItemDisplay : Display
+            {
+                [MCS.Intrinsic("display.new")] public ItemDisplay(string item) { }
+                [MCS.Nbt("item", "item")] public string Item { set { } }
+                [MCS.Nbt("item_display", "enum")] public ItemDisplayMode Mode { get; set; }
+                [MCS.Intrinsic("obj.clone")] public new ItemDisplay Clone() => null;
+            }
+
+            public sealed class TextDisplay : Display
+            {
+                [MCS.Intrinsic("display.new")] public TextDisplay(string text) { }
+                /// Constant text, or an interpolated string with runtime values ($"Score: {x}", needs 1.20.2+)
+                [MCS.Nbt("text", "text")] public string Text { set { } }
+                [MCS.Nbt("line_width", "int")] public int LineWidth { get; set; }
+                /// Background color as ARGB, e.g. 0x40000000 (default: translucent black)
+                [MCS.Nbt("background", "int")] public int Background { get; set; }
+                /// 0–255 (255 = opaque)
+                [MCS.Nbt("text_opacity", "byte")] public int TextOpacity { get; set; }
+                [MCS.Nbt("shadow", "byte")] public bool Shadow { get; set; }
+                [MCS.Nbt("see_through", "byte")] public bool SeeThrough { get; set; }
+                [MCS.Nbt("default_background", "byte")] public bool DefaultBackground { get; set; }
+                [MCS.Nbt("alignment", "enum")] public TextAlignment Alignment { get; set; }
+                [MCS.Intrinsic("obj.clone")] public new TextDisplay Clone() => null;
             }
         }
 

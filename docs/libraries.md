@@ -6,6 +6,7 @@ MC# ships with five built-in libraries. All of them compile into the datapack it
 |---|---|---|
 | **Core** | Always available | `asm`, `m.Console`, `Position`, `GetWorldSpawn`, `SetWorldSpawn`, `SpawnEntity`, `m.SetBlock`/`FillBlock`/`IsBlock`, `[Load]`, `[Tick]` |
 | **EntityLib** | `use EntityLib;` | `Entity`, `EntityType`, `m.SpawnEntityObject` |
+| **DisplayLib** | `use DisplayLib;` | `BlockDisplay`, `ItemDisplay`, `TextDisplay` (display entities: scale, rotation, animation, runtime text) |
 | **BlockLib** | `use BlockLib;` | `Block` and one class per block (`OakStairs`, `Stone`, …), `m.SetBlockObject`/`FillBlockObject`/`IsBlockObject` |
 | **PlayerLib** | `use PlayerLib;` | `Player` (control, inventory slots, effects, …), `Slot`, `GameMode` |
 | **TuiLib** | `use TuiLib;` | Clickable chat `Button`, styled `Text`, `Tui.Menu`/`Print`/`Title` |
@@ -192,6 +193,58 @@ if (!m.SpawnEntityObject(x, GetWorldSpawn())) return;
 - **¹ Attributes:** constants work on every version. Runtime values need function macros, so they work on 1.20.2+ only (`#if MC_1_20_2_OR_GREATER`).
 
 Methods: `Kill()`, `Teleport(Position pos)`. Entities can be passed to methods (`void Buff(Entity e)`).
+
+---
+
+## DisplayLib
+
+Block, item and text **display entities** — models and floating text that don't move, collide or tick. They are entities, so everything from [EntityLib](#entitylib) works too (`m.SpawnEntityObject`, `Kill()`, `Teleport()`, `Glowing`, `Clone()`, the [single-use rule](language.md#objects-single-use)).
+
+```csharp
+use DisplayLib;
+use BlockLib;
+
+var label = new TextDisplay("Hello") { Billboard = Billboard.Center, Background = 0x40000000 };
+m.SpawnEntityObject(label, Position.Here.Offset(0, 2, 0));
+label.Text = $"Score: {score}";              // runtime values are written into the text (1.20.2+)
+
+new Block : OakStairs stairs;
+stairs.Facing = Facing.East;
+var model = new BlockDisplay(stairs) { Scale = 0.5f, Brightness = 15 };
+m.SpawnEntityObject(model, Position.Here);
+model.RotationY = 90f;                       // degrees
+model.Scale = 2f;
+model.Animate(20);                           // the two changes above play over 20 ticks
+
+var gem = new ItemDisplay("diamond") { Mode = ItemDisplayMode.Ground };
+```
+
+The constructor argument sets the content (`Text`, `Block`, `Item`); the `{ … }` initializer sets other properties. Both are applied right after the summon, like other pre-spawn writes.
+
+**All displays**
+
+| Property | Type | NBT | |
+|---|---|---|---|
+| `Billboard` | `Billboard` (`Fixed`, `Vertical`, `Horizontal`, `Center`) | `billboard` | Turn to face the player |
+| `Scale` / `ScaleX`, `ScaleY`, `ScaleZ` | `float` | `transformation.scale` | Uniform / per axis |
+| `OffsetX`, `OffsetY`, `OffsetZ` | `float` | `transformation.translation` | Model offset in blocks |
+| `RotationY`, `RotationX` | `float` (degrees, write-only) | `transformation.left_rotation` / `right_rotation` | Around Y (counterclockwise seen from above), then X |
+| `Brightness` | `int` 0–15 | `brightness` | Fixed light level (block and sky) |
+| `GlowColor` | `int` (RGB) | `glow_color_override` | Outline color with `Glowing = true` |
+| `ViewRange`, `ShadowRadius`, `ShadowStrength`, `Width`, `Height` | `float` | same names | |
+| `InterpolationDuration`, `InterpolationDelay` | `int` ticks | `interpolation_duration`, `start_interpolation` | |
+| `TeleportDuration` | `int` ticks | `teleport_duration` | Smooth teleports (1.20.2+) |
+
+`Animate(int ticks)` animates this tick's transformation changes (`Scale`, `Offset…`, `Rotation…`) over `ticks` ticks.
+
+**TextDisplay**: `Text` (string, write-only), `LineWidth` (`int`), `Background` (`int` ARGB, e.g. `0x40000000`), `TextOpacity` (`int` 0–255), `Shadow`, `SeeThrough`, `DefaultBackground` (`bool`), `Alignment` (`TextAlignment.Center/Left/Right`).
+**BlockDisplay**: `Block` (a [block object](#blocklib), write-only; the constructor also takes an ID string such as `"oak_stairs[facing=east]"`).
+**ItemDisplay**: `Item` (item ID, write-only), `Mode` (`ItemDisplayMode`: `None`, `Head`, `Gui`, `Ground`, `Fixed`, `ThirdPersonLeftHand`, …).
+
+- **Runtime text:** text displays don't resolve score components, so `$"…{x}…"` is turned into a function macro that writes the current values into the text (numbers formatted like `m.Console.WriteLine`). This needs 1.20.2+; constant text works everywhere. It shows the value at the time of the assignment — assign again to update it.
+- **Runtime rotation** (`model.RotationY = angle;`) also uses a macro (1.20.2+). Other properties work with runtime values on every version.
+- **Versions:** text is written as JSON (≤1.21.4) or SNBT (1.21.5+), items with `Count` (≤1.20.4) or `count`, and the block state as `{Name, Properties}` (≤26.2) or `{id, properties}` (26.3+) — handled per version.
+- Reading works for number properties (`model.ScaleX`, `label.LineWidth`, …); `Text`, `Block`, `Item` and the rotations are write-only.
 
 ---
 

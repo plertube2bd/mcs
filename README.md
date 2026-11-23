@@ -75,6 +75,7 @@ Methods and fields can be written at the top level without a class. They are wra
 | `use PlayerLib;` | `Player.All` / `Self` / `Named(...)`: messages, effects, xp, gamemode, **per-slot inventory control** (`SetSlot`, `SwapSlots`, `IsSlot`, …) |
 | `use TuiLib;` | Clickable chat buttons wired to MC# methods (`new Button("[OK]", OnOk)`), styled text, menus |
 | `use MathLib;` | `Math.Sin` / `Cos` / `Tan` (lookup table, Q15.16), `Math.FloorDiv` / `FloorMod`, `Math.PI`, `Deg2Rad` |
+| `use DisplayLib;` | Block / item / text display entities: scale, rotation, animation, live text |
 | `use ItemLib;` | Item objects with names/lore, `m.GiveObject`, `[OnRightClickObject(nameof(item))]` |
 | `use GuiLib;` | `Gui.SetDisplay` / `ClearDisplay`, sidebar/tab-list `Board`, `BossBar` |
 

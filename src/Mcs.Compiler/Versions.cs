@@ -30,6 +30,8 @@ public sealed record TargetProfile(McVersion First, McVersion Last)
     public bool NewTextComponents => Format >= 71;
     /// Any item can be made usable (right-click detection): food component (1.20.5–1.21.1) → consumable (1.21.2+)
     public bool ConsumableComponent => Format >= 57;
+    /// Block state NBT: {Name, Properties} → {id, properties} (26.3+; display entities' block_state)
+    public bool NewBlockStateNbt => Format >= 121;
     /// /compute (number-provider expressions in one command) — 26.3+
     public bool Compute => Format >= 121;
     /// Scoreboard display slot: belowName (≤1.20.1) → below_name (1.20.2+)

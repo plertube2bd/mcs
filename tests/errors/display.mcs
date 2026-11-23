@@ -1,0 +1,12 @@
+// The default range starts at 1.20.1: runtime display text / rotation and teleport_duration need 1.20.2+.
+use DisplayLib;
+static int score = 1;
+static void Main() {
+    var t = new TextDisplay("a") { TeleportDuration = 3 };
+    t.Text = $"{score}";
+    float a = 10f;
+    t.RotationY = a;
+}
+// @error TeleportDuration needs Minecraft 1.20.2+
+// @error Runtime values in display text need function macros (1.20.2+)
+// @error Setting RotationY from a runtime value needs function macros (1.20.2+)

@@ -4,7 +4,7 @@ Errors while you type, syntax highlighting, snippets, `mcs.json` validation and 
 
 - **Errors while you type:** after a short pause (and on save) the extension runs the compiler with `--check --stdin`, so the unsaved text is checked and nothing is written. If there is an `mcs.json` above the file, the whole project is checked and errors in other files show up too. The status bar shows `MC# ✓` or the error count.
 - **Highlighting:** C# plus MC#-only syntax — `use X;`, `new Entity : Zombie x;`, `Wait()`, `class X : dummy`, and `asm` lines/blocks, whose contents are highlighted as mcfunction (commands, selectors, resource IDs, JSON, `$(macros)`).
-- **Snippets:** `main`, `tick`, `load`, `asm`, `cw` (WriteLine), `wait`, `entityclass`, `foreache`, `dummy`, `mount`, `arr`, `board`, `bossbar`, `onevent`, `onrightclick`, `ontrigger`, `item`, `onrightclickobject`.
+- **Snippets:** `main`, `tick`, `load`, `asm`, `cw` (WriteLine), `wait`, `entityclass`, `foreache`, `dummy`, `mount`, `arr`, `board`, `bossbar`, `onevent`, `onrightclick`, `ontrigger`, `item`, `onrightclickobject`, `textdisplay`, `blockdisplay`.
 - **`mcs.json`:** completion and validation of the project file.
 - **Problem matcher `$mcs`:** turns `file(line,col): error MCS: …` into entries in the Problems panel.
 

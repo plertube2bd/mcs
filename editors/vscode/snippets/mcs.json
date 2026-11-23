@@ -157,5 +157,24 @@
       "}"
     ],
     "description": "Right-click with an item object"
+  },
+  "Text display": {
+    "prefix": "textdisplay",
+    "description": "DisplayLib: a text display (runtime values need 1.20.2+)",
+    "body": [
+      "var ${1:label} = new TextDisplay(\"${2:Hello}\") { Billboard = Billboard.${3|Center,Fixed,Vertical,Horizontal|} };",
+      "m.SpawnEntityObject($1, ${4:Position.Here});",
+      "$1.Text = \\$\"${5:Score: {score\\}}\";$0"
+    ]
+  },
+  "Block display": {
+    "prefix": "blockdisplay",
+    "description": "DisplayLib: a block display with scale, rotation and animation",
+    "body": [
+      "var ${1:model} = new BlockDisplay(\"${2:minecraft:stone}\") { Scale = ${3:1f} };",
+      "m.SpawnEntityObject($1, ${4:Position.Here});",
+      "$1.RotationY = ${5:90f};",
+      "$1.Animate(${6:20});$0"
+    ]
   }
 }

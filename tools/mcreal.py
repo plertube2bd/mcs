@@ -41,6 +41,7 @@ IGNORED = [
     r'Detected setBlock in a far chunk', r'Unable to find spawn', r'Skipping', r'Server is running in offline mode',
     r'online-mode', r'offline mode', r'Mojang', r'servers will not be able to', r'While this makes',
     r'To change this', r'Experimental', r'Unknown data pack type', r'Failed to fetch',
+    r'^Display entityNot a string$',   # ≤1.21.4: logged by every text_display summon (empty text)
 ]
 
 

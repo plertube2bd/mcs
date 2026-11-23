@@ -6,6 +6,7 @@ MC#에는 내장 라이브러리가 다섯 개 있습니다. 모두 데이터팩
 |---|---|---|
 | **Core** | 항상 사용 가능 | `asm`, `m.Console`, `Position`, `GetWorldSpawn`, `SetWorldSpawn`, `SpawnEntity`, `m.SetBlock`/`FillBlock`/`IsBlock`, `[Load]`, `[Tick]` |
 | **EntityLib** | `use EntityLib;` | `Entity`, `EntityType`, `m.SpawnEntityObject` |
+| **DisplayLib** | `use DisplayLib;` | `BlockDisplay`, `ItemDisplay`, `TextDisplay` (디스플레이 엔티티: 크기, 회전, 애니메이션, 실행 중 텍스트) |
 | **BlockLib** | `use BlockLib;` | `Block`과 블록마다 하나씩 있는 클래스(`OakStairs`, `Stone`, …), `m.SetBlockObject`/`FillBlockObject`/`IsBlockObject` |
 | **PlayerLib** | `use PlayerLib;` | `Player` (제어, 인벤토리 칸, 효과 등), `Slot`, `GameMode` |
 | **TuiLib** | `use TuiLib;` | 클릭할 수 있는 채팅 `Button`, 스타일 `Text`, `Tui.Menu`/`Print`/`Title` |
@@ -192,6 +193,58 @@ if (!m.SpawnEntityObject(x, GetWorldSpawn())) return;
 - **¹ 속성(attribute):** 상수는 모든 버전에서 됩니다. 실행 중의 값은 함수 매크로가 필요해서 1.20.2 이상에서만 됩니다 (`#if MC_1_20_2_OR_GREATER`).
 
 메서드는 `Kill()`, `Teleport(Position pos)`가 있습니다. 엔티티를 메서드에 넘길 수도 있습니다 (`void Buff(Entity e)`).
+
+---
+
+## DisplayLib
+
+블록·아이템·텍스트 **디스플레이 엔티티**입니다. 움직이거나 충돌하거나 틱마다 동작하지 않는 모델과 떠 있는 글자입니다. 엔티티이므로 [EntityLib](#entitylib)의 기능(`m.SpawnEntityObject`, `Kill()`, `Teleport()`, `Glowing`, `Clone()`, [한 번만 사용 규칙](language.md#오브젝트-한-번만-사용))도 그대로 됩니다.
+
+```csharp
+use DisplayLib;
+use BlockLib;
+
+var label = new TextDisplay("Hello") { Billboard = Billboard.Center, Background = 0x40000000 };
+m.SpawnEntityObject(label, Position.Here.Offset(0, 2, 0));
+label.Text = $"Score: {score}";              // 실행 중 값이 글자에 들어감 (1.20.2+)
+
+new Block : OakStairs stairs;
+stairs.Facing = Facing.East;
+var model = new BlockDisplay(stairs) { Scale = 0.5f, Brightness = 15 };
+m.SpawnEntityObject(model, Position.Here);
+model.RotationY = 90f;                       // 도 단위
+model.Scale = 2f;
+model.Animate(20);                           // 위의 두 변경이 20틱 동안 애니메이션됨
+
+var gem = new ItemDisplay("diamond") { Mode = ItemDisplayMode.Ground };
+```
+
+생성자 인자는 내용(`Text`, `Block`, `Item`)을, `{ … }` 초기화는 다른 속성을 정합니다. 둘 다 다른 소환 전 설정처럼 소환 직후에 적용됩니다.
+
+**모든 디스플레이**
+
+| 속성 | 타입 | NBT | |
+|---|---|---|---|
+| `Billboard` | `Billboard` (`Fixed`, `Vertical`, `Horizontal`, `Center`) | `billboard` | 플레이어 쪽으로 회전 |
+| `Scale` / `ScaleX`, `ScaleY`, `ScaleZ` | `float` | `transformation.scale` | 균일 / 축별 |
+| `OffsetX`, `OffsetY`, `OffsetZ` | `float` | `transformation.translation` | 모델 위치 이동 (블록 단위) |
+| `RotationY`, `RotationX` | `float` (도, 쓰기 전용) | `transformation.left_rotation` / `right_rotation` | Y축(위에서 볼 때 반시계), 그다음 X축 회전 |
+| `Brightness` | `int` 0–15 | `brightness` | 고정 밝기 (블록·하늘 빛) |
+| `GlowColor` | `int` (RGB) | `glow_color_override` | `Glowing = true`일 때 테두리 색 |
+| `ViewRange`, `ShadowRadius`, `ShadowStrength`, `Width`, `Height` | `float` | 같은 이름 | |
+| `InterpolationDuration`, `InterpolationDelay` | `int` 틱 | `interpolation_duration`, `start_interpolation` | |
+| `TeleportDuration` | `int` 틱 | `teleport_duration` | 부드러운 순간이동 (1.20.2+) |
+
+`Animate(int ticks)`는 이번 틱에 바꾼 변환(`Scale`, `Offset…`, `Rotation…`)을 `ticks`틱 동안 애니메이션합니다.
+
+**TextDisplay**: `Text`(문자열, 쓰기 전용), `LineWidth`(`int`), `Background`(`int` ARGB, 예: `0x40000000`), `TextOpacity`(`int` 0–255), `Shadow`, `SeeThrough`, `DefaultBackground`(`bool`), `Alignment`(`TextAlignment.Center/Left/Right`).
+**BlockDisplay**: `Block`([블록 오브젝트](#blocklib), 쓰기 전용. 생성자는 `"oak_stairs[facing=east]"` 같은 ID 문자열도 받음).
+**ItemDisplay**: `Item`(아이템 ID, 쓰기 전용), `Mode`(`ItemDisplayMode`: `None`, `Head`, `Gui`, `Ground`, `Fixed`, `ThirdPersonLeftHand`, …).
+
+- **실행 중 텍스트:** 텍스트 디스플레이는 점수 컴포넌트를 계산하지 않으므로, `$"…{x}…"`를 현재 값을 글자에 직접 넣는 함수 매크로로 바꿉니다 (숫자 형식은 `m.Console.WriteLine`과 같음). 1.20.2+가 필요하고, 상수 텍스트는 모든 버전에서 됩니다. 대입한 시점의 값이 표시되니, 갱신하려면 다시 대입하세요.
+- **실행 중 회전값**(`model.RotationY = angle;`)도 매크로를 씁니다 (1.20.2+). 다른 속성은 모든 버전에서 실행 중 값을 쓸 수 있습니다.
+- **버전:** 텍스트는 JSON(≤1.21.4) / SNBT(1.21.5+), 아이템은 `Count`(≤1.20.4) / `count`, 블록 상태는 `{Name, Properties}`(≤26.2) / `{id, properties}`(26.3+)로 버전마다 알맞게 씁니다.
+- 숫자 속성은 읽을 수도 있습니다 (`model.ScaleX`, `label.LineWidth` 등). `Text`, `Block`, `Item`, 회전은 쓰기 전용입니다.
 
 ---
 
