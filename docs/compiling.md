@@ -55,6 +55,7 @@ There are two ways to build. Both produce the same result.
 | `minecraft` | Target version or range (see below) | `1.20.1-26.3` |
 | `resources` | Folder copied into the datapack unchanged (worldgen, tags, …) | — |
 | `description` | `pack.mcmeta` description | `MC# datapack: <ns> (...)` |
+| `division` | `csharp`: `/` and `%` like C# (toward zero). `minecraft`: one scoreboard operation, toward −∞ (faster; see [division](language.md#minecraft-division-faster)) | `csharp` |
 
 ### b) Command line
 
@@ -66,6 +67,7 @@ There are two ways to build. Both produce the same result.
 |---|---|---|
 | `<file.mcs ...>` | Source files. If you pass several files, they compile into one datapack. | (required) |
 | `--mc <version>` / `--mc <min>-<max>` | Target Minecraft version or range | `1.20.1-26.3` |
+| `--division csharp\|minecraft` | How `/` and `%` round (same as `division` in `mcs.json`) | `csharp` |
 | `-o`, `--out <dir>` | Output datapack folder | `out/<namespace>` |
 | `-n`, `--namespace <ns>` | Datapack namespace | First file name |
 | `--versions` | Lists supported versions, pack formats, and `#if` symbols | — |
@@ -100,14 +102,14 @@ Build succeeded: out/versions (Minecraft 1.20.1 – 26.3)
 | 1.21.2+ | Attribute IDs lose `generic.`; `boat` → `oak_boat` | Writes the right IDs |
 | 1.21.9+ | `pack.mcmeta` uses `min_format`/`max_format` | Writes the right fields |
 | 1.21.9+ | Spawn chunks removed (nothing is loaded when `#load` runs) | If `GetWorldSpawn()` is used or the pack summons entities / places blocks, force-loads the spawn chunk and starts `Main` once it's loaded |
-| 26.3+ | `/compute` (number-provider expressions) | `double` `*` `/`, C# `int` `/` `%` and `Math.Sin/Cos/Tan` become single commands instead of helper functions |
+| 26.3+ | `/compute` (number-provider expressions) | `Q16` `*` `/`, C# `int` `/` `%` and `Math.Sin/Cos/Tan` become single commands instead of helper functions |
 
 ### Branching in your code (`#if`)
 
 Each version group defines a symbol of the form `MC_<version>_OR_GREATER`, similar to .NET's `NET6_0_OR_GREATER`. Use it with C#'s `#if`:
 
 ```csharp
-float hp = 30f;
+Milli hp = 30f;
 #if MC_1_20_2_OR_GREATER
     hp = hp + 20f;
     h.maxHealth = hp;        // runtime value → uses a macro (1.20.2+)
@@ -140,6 +142,7 @@ If the build fails, the compiler prints errors as `file(line,column): error MCS:
 - Errors starting with `CSxxxx` are C# type and syntax errors from Roslyn.
 - All other errors mean you used a feature MC# can't express in Minecraft (or in some of the target versions).
 - An error prefixed with `[1.20.1]` or similar applies only to the listed versions.
+- **Warnings** (`file(line,column): warning MCS: …`) don't stop the build. Today they mark deprecated names: `float` / `double` still work but should become `Milli` / `Q16`.
 
 ## 6. Applying the pack to a world
 
@@ -200,7 +203,7 @@ dotnet bin/Release/net8.0/mcs.dll ../../examples/hello.mcs -o ../../out/hello
 | `Prelude.cs` | C# declarations of the built-in libraries (see the [library reference](libraries.md)) |
 | `Codegen.cs` | Syntax tree → mcfunction (core language) |
 | `Codegen.Libs.cs` | BlockLib / PlayerLib / TuiLib / SpawnEntity / SetWorldSpawn |
-| `Codegen.Math.cs` | `double` (Q15.16) multiply/divide helpers, C# integer division helpers, MathLib (sin/cos/tan lookup table) |
+| `Codegen.Math.cs` | `Q16` (Q15.16) multiply/divide helpers, C# integer division helpers, MathLib (sin/cos/tan lookup table) |
 | `Codegen.Gui.cs` | GuiLib (display slots, `Board`, `BossBar`) |
 | `Codegen.Array.cs` | Writable arrays (element scores, runtime-index lookup trees) |
 | `Codegen.Objects.cs` | ItemLib, object single-use rule (`Clone`, `Dispose`, run-time guard) |
@@ -228,7 +231,7 @@ python3 tests/run.py -u           # rewrite the expected outputs — review the 
 | `tests/errors/*.mcs` | Must fail to compile, and every `// @error <text>` line must appear in the errors. |
 | `examples/*.mcs` | Must compile. |
 
-Directives in a case: `// @mc 1.20.2-26.3` (version range), `// @ticks 100` (how long to simulate; the default is until nothing is scheduled, or 20 ticks when there are `[Tick]` methods), and `// @do 5 die Steve` (a scripted player action, repeatable — see below).
+Directives in a case: `// @mc 1.20.2-26.3` (version range), `// @ticks 100` (how long to simulate; the default is until nothing is scheduled, or 20 ticks when there are `[Tick]` methods), `// @do 5 die Steve` (a scripted player action, repeatable — see below), `// @warning <text>` (the build must print this warning) and `// @real load` (on real servers only check that the pack loads — for cases that depend on blocks or entity NBT, which the simulator doesn't have).
 
 **Simulator** (`tools/mcsim.py`) runs a built datapack without Minecraft:
 
@@ -258,7 +261,7 @@ python3 tests/run.py --real --servers=2 arrays           # 2 servers at a time, 
 - Needs Java (21+, 25 for 26.x) and internet access the first time a version is used. Server jars are downloaded from Mojang once and kept in `~/.cache/mcs/servers`.
 - Each pack is enabled alone, run, and disabled again. On 1.20.3+ the server is frozen and advanced with `tick step`, so it runs exactly as many ticks as the simulator; 1.20.1/1.20.2 run in real time.
 - **Fails on** any ERROR/WARN line the server logs for the pack (a function that does not parse, a bad tag, advancement or overlay), and on **scores that differ from the simulator** (fake players such as `$x` / `#x`, read back with `scoreboard players list`).
-- Cases with scripted players (`// @do`) are only load-checked (there are no players on the server). The same goes for `[Tick]` cases on 1.20.1/1.20.2.
+- Cases with scripted players (`// @do`) or `// @real load` are only load-checked (there are no players on the server). The same goes for `[Tick]` cases on 1.20.1/1.20.2.
 
 ## 10. Editor support (VS Code)
 

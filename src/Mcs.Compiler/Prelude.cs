@@ -11,6 +11,8 @@ public static class Prelude
     public const string GlobalUsings = """
         global using MCS;
         global using static MCS.Builtins;
+        global using Milli = System.Single;
+        global using Q16 = System.Double;
         """;
 
     public const string Source = """
@@ -106,6 +108,75 @@ public static class Prelude
             [System.AttributeUsage(System.AttributeTargets.Method)]
             public sealed class OnStatAttribute : System.Attribute { public OnStatAttribute(string criterion) { } }
 
+            /// `/` and `%` in this method or class use Minecraft's own scoreboard division: one command, rounds toward
+            /// −∞, and the remainder takes the divisor's sign (-7 / 2 = -4, -7 % 2 = 1). Faster than C# division.
+            [System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
+            public sealed class MinecraftDivisionAttribute : System.Attribute { }
+
+            /// `/` and `%` in this method or class use C# division even when the project uses "division": "minecraft".
+            [System.AttributeUsage(System.AttributeTargets.Method | System.AttributeTargets.Class)]
+            public sealed class CSharpDivisionAttribute : System.Attribute { }
+
+            /// A function of another datapack: [External("other:path/func")] static extern void F();
+            /// Parameters become macro arguments ($(name), 1.20.2+); an int/bool result is the function's /return value.
+            /// Function tags work too: [External("#other:hooks")].
+            [System.AttributeUsage(System.AttributeTargets.Method)]
+            public sealed class ExternalAttribute : System.Attribute { public ExternalAttribute(string function) { } }
+
+            /// A static class whose extern methods are methods of another MC# datapack (its namespace, and the class
+            /// the methods are declared in there, if any). Arguments and results use that pack's scores.
+            [System.AttributeUsage(System.AttributeTargets.Class)]
+            public sealed class McsPackAttribute : System.Attribute { public McsPackAttribute(string ns, string className = null) { } }
+
+            /// A string that exists at run time, stored in NBT storage. Comparing, Length, Substring work on every
+            /// version; joining values (+, $"...") and runtime indexes need function macros (1.20.2+).
+            public sealed class NString
+            {
+                public static implicit operator NString(string s) => null;
+                [Intrinsic("nstr.concat")] public static NString operator +(NString a, NString b) => null;
+                [Intrinsic("nstr.concat")] public static NString operator +(NString a, object b) => null;
+                [Intrinsic("nstr.concat")] public static NString operator +(object a, NString b) => null;
+                [Intrinsic("nstr.eq")] public static bool operator ==(NString a, NString b) => false;
+                [Intrinsic("nstr.ne")] public static bool operator !=(NString a, NString b) => false;
+                public override bool Equals(object o) => false;
+                public override int GetHashCode() => 0;
+                [Intrinsic("nstr.length")] public int Length => 0;
+                [Intrinsic("nstr.isempty")] public bool IsEmpty => false;
+                /// One character (as an NString).
+                [Intrinsic("nstr.char")] public NString this[int index] => null;
+                [Intrinsic("nstr.sub")] public NString Substring(int start) => null;
+                [Intrinsic("nstr.sub")] public NString Substring(int start, int length) => null;
+                [Intrinsic("nstr.starts")] public bool StartsWith(NString prefix) => false;
+                [Intrinsic("nstr.ends")] public bool EndsWith(NString suffix) => false;
+                /// Position of the first occurrence, or -1 (1.20.2+).
+                [Intrinsic("nstr.indexof")] public int IndexOf(NString value) => 0;
+                [Intrinsic("nstr.contains")] public bool Contains(NString value) => false;
+                /// Parses the text as an integer (0 if it is not a number; 1.20.2+).
+                [Intrinsic("nstr.toint")] public int ToInt() => 0;
+                /// The text of any value: NString.From(score) (1.20.2+ for runtime values).
+                [Intrinsic("nstr.from")] public static NString From(object value) => null;
+            }
+
+            /// An array whose length can change at run time, stored in NBT storage. T: int, bool, Milli, Q16, NString.
+            /// Constant indexes, Add, Length and foreach work on every version; runtime indexes need 1.20.2+ (macros).
+            public sealed class NArray<T> : System.Collections.Generic.IEnumerable<T>
+            {
+                [Intrinsic("narr.new")] public NArray() { }
+                /// `length` elements with the default value (0 / false / "").
+                [Intrinsic("narr.new")] public NArray(int length) { }
+                [Intrinsic("narr.index")] public T this[int index] { get => default; set { } }
+                [Intrinsic("narr.length")] public int Length => 0;
+                [Intrinsic("narr.length")] public int Count => 0;
+                [Intrinsic("narr.add")] public void Add(T value) { }
+                [Intrinsic("narr.insert")] public void Insert(int index, T value) { }
+                [Intrinsic("narr.removeat")] public void RemoveAt(int index) { }
+                /// Removes the last element and returns it.
+                [Intrinsic("narr.pop")] public T Pop() => default;
+                [Intrinsic("narr.clear")] public void Clear() { }
+                public System.Collections.Generic.IEnumerator<T> GetEnumerator() => null;
+                System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => null;
+            }
+
             /// Base class of scoreboard classes: `public class test : dummy {}` — every static int/bool field
             /// is a score holder (the field name) in the class's objective (criteria dummy, created on load).
             /// Using test.anything declares the field automatically.
@@ -117,6 +188,8 @@ public static class Prelude
                 [Intrinsic("pos.new")] public Position(double x, double y, double z) { }
                 [Intrinsic("pos.here")] public static Position Here => default;
                 [Intrinsic("pos.offset")] public Position Offset(double dx, double dy, double dz) => default;
+                /// The same position in another dimension (execute in …).
+                [Intrinsic("pos.in")] public Position In(WorldLib.Dimension dimension) => default;
             }
 
             /// Base class of entity classes ([Entity("minecraft:marker", "my.tag")] class Province : EntityObject).
@@ -130,6 +203,20 @@ public static class Prelude
                 [Intrinsic("ent.pos")] public Position Position => default;
                 [Intrinsic("ent.tp")] public void Teleport(Position pos) { }
                 [Intrinsic("ent.run")] public void Run(System.Action action) { }
+
+                // ---- interactions (EntityLib also has these for Entity objects)
+                /// Deals damage (1.19.4+ /damage). attacker: an Entity or entity reference.
+                [Intrinsic("ex.damage")] public void Damage(float amount, string type = "generic", object attacker = null) { }
+                /// Rides the vehicle (an Entity or entity reference).
+                [Intrinsic("ex.ride")] public void Ride(object vehicle) { }
+                [Intrinsic("ex.dismount")] public void Dismount() { }
+                [Intrinsic("ex.tpto")] public void TeleportTo(object target) { }
+                [Intrinsic("ex.lookat")] public void LookAt(Position pos) { }
+                [Intrinsic("ex.lookat")] public void LookAt(object target) { }
+                [Intrinsic("ex.motion")] public void SetMotion(double x, double y, double z) { }
+                /// Whether `other` is within `distance` blocks.
+                [Intrinsic("ex.near")] public bool IsNear(object other, double distance) => false;
+                [Intrinsic("ex.isin")] public bool IsIn(WorldLib.Dimension dimension) => false;
             }
 
             /// Entity queries. Selector filters use selector syntax, e.g. "tag=a,scores={x=1..}".
@@ -203,6 +290,191 @@ public static class Prelude
                 [MCS.Intrinsic("obj.clone")] public Entity Clone() => null;
                 /// Discards this object: it cannot be used any more.
                 [MCS.Intrinsic("obj.dispose")] public void Dispose() { }
+
+                // ---- interactions
+                [MCS.Intrinsic("ex.addtag")] public void AddTag(string tag) { }
+                [MCS.Intrinsic("ex.removetag")] public void RemoveTag(string tag) { }
+                [MCS.Intrinsic("ex.hastag")] public bool HasTag(string tag) => false;
+                /// Deals damage (/damage). attacker: an Entity or entity reference (e.g. Player.Self).
+                [MCS.Intrinsic("ex.damage")] public void Damage(float amount, string type = "generic", object attacker = null) { }
+                [MCS.Intrinsic("ex.effect")] public void Effect(string effect, int seconds, int amplifier = 0, bool hideParticles = false) { }
+                [MCS.Intrinsic("ex.cleareffects")] public void ClearEffects() { }
+                /// Rides the vehicle (an Entity or entity reference).
+                [MCS.Intrinsic("ex.ride")] public void Ride(object vehicle) { }
+                [MCS.Intrinsic("ex.dismount")] public void Dismount() { }
+                [MCS.Intrinsic("ex.tpto")] public void TeleportTo(object target) { }
+                [MCS.Intrinsic("ex.lookat")] public void LookAt(MCS.Position pos) { }
+                [MCS.Intrinsic("ex.lookat")] public void LookAt(object target) { }
+                [MCS.Intrinsic("ex.motion")] public void SetMotion(double x, double y, double z) { }
+                [MCS.Intrinsic("ex.near")] public bool IsNear(object other, double distance) => false;
+                [MCS.Intrinsic("ex.isin")] public bool IsIn(WorldLib.Dimension dimension) => false;
+                [MCS.Intrinsic("ex.exists")] public bool Exists => false;
+            }
+
+            /// An interaction entity (an invisible hitbox that detects clicks; 1.19.4+).
+            public sealed class Interaction : Entity
+            {
+                [MCS.Intrinsic("display.new")] public Interaction() { }
+                [MCS.Nbt("width", "float")] public float Width { get; set; }
+                [MCS.Nbt("height", "float")] public float Height { get; set; }
+                /// Swing the player's arm when clicked.
+                [MCS.Nbt("response", "byte")] public bool Response { get; set; }
+                /// Was it right-clicked since the last call? (clears the click)
+                [MCS.Intrinsic("interaction.clicked")] public bool Clicked() => false;
+                /// Was it left-clicked (attacked) since the last call? (clears the attack)
+                [MCS.Intrinsic("interaction.attacked")] public bool Attacked() => false;
+                /// The player who right-clicked it last.
+                [MCS.Intrinsic("interaction.clicker")] public PlayerLib.Player Clicker => null;
+                /// The player who attacked it last.
+                [MCS.Intrinsic("interaction.attacker")] public PlayerLib.Player Attacker => null;
+                [MCS.Intrinsic("obj.clone")] public new Interaction Clone() => null;
+            }
+        }
+
+        namespace WorldLib
+        {
+            public enum Weather { Clear, Rain, Thunder }
+            public enum Difficulty { Peaceful, Easy, Normal, Hard }
+            public enum Dimension { [MCS.McId("overworld")] Overworld, [MCS.McId("the_nether")] Nether, [MCS.McId("the_end")] End }
+
+            public static class World
+            {
+                /// Time of day, 0–23999 (time query daytime).
+                [MCS.Intrinsic("world.time")] public static int Time() => 0;
+                /// Days passed (time query day).
+                [MCS.Intrinsic("world.day")] public static int Day() => 0;
+                /// Ticks since the world was created (time query gametime).
+                [MCS.Intrinsic("world.gametime")] public static int GameTime() => 0;
+                [MCS.Intrinsic("world.settime")] public static void SetTime(int time) { }
+                [MCS.Intrinsic("world.addtime")] public static void AddTime(int ticks) { }
+                [MCS.Intrinsic("world.weather")] public static Weather Weather { set { } }
+                /// Weather for a number of seconds (-1: the game picks the duration).
+                [MCS.Intrinsic("world.setweather")] public static void SetWeather(Weather weather, int seconds = -1) { }
+                [MCS.Intrinsic("world.difficulty")] public static Difficulty Difficulty { set { } }
+                [MCS.Intrinsic("world.gamerule")] public static void GameRule(string rule, bool value) { }
+                [MCS.Intrinsic("world.gamerule")] public static void GameRule(string rule, int value) { }
+                [MCS.Intrinsic("world.border")] public static void SetBorder(double size, int seconds = 0) { }
+                [MCS.Intrinsic("world.bordercenter")] public static void SetBorderCenter(double x, double z) { }
+                /// Runs the action in a dimension (execute in …), at the same coordinates.
+                [MCS.Intrinsic("world.run")] public static void Run(Dimension dimension, System.Action action) { }
+                /// Whether the current execution position is in this dimension.
+                [MCS.Intrinsic("world.isin")] public static bool IsIn(Dimension dimension) => false;
+            }
+        }
+
+        namespace ParticleLib
+        {
+            public static class Particle
+            {
+                /// particle <id> <pos> 0 0 0 <speed> <count>
+                [MCS.Intrinsic("particle.spawn")] public static void Spawn(string particle, MCS.Position pos, int count = 1, double speed = 0, bool force = false) { }
+                /// Spread over a box of dx × dy × dz around pos.
+                [MCS.Intrinsic("particle.spawnd")] public static void Spawn(string particle, MCS.Position pos, double dx, double dy, double dz, int count = 1, double speed = 0, bool force = false) { }
+                /// Colored dust (rgb: 0xRRGGBB).
+                [MCS.Intrinsic("particle.dust")] public static void Dust(int rgb, MCS.Position pos, float size = 1, int count = 1) { }
+                /// Particles along a line (both ends relative to the same position or absolute; computed at compile time).
+                [MCS.Intrinsic("particle.line")] public static void Line(string particle, MCS.Position from, MCS.Position to, double step = 0.25) { }
+                /// A horizontal circle of `points` particles (computed at compile time).
+                [MCS.Intrinsic("particle.circle")] public static void Circle(string particle, MCS.Position center, double radius, int points = 16) { }
+            }
+        }
+
+        namespace SoundLib
+        {
+            public enum SoundSource { Master, Music, Record, Weather, Block, Hostile, Neutral, Player, Ambient, Voice }
+
+            public static class Sound
+            {
+                /// Plays a sound at a position for every player in range.
+                [MCS.Intrinsic("sound.play")] public static void Play(string sound, MCS.Position pos, float volume = 1, float pitch = 1, SoundSource source = SoundSource.Master) { }
+                /// Plays a sound to players, at their own position.
+                [MCS.Intrinsic("sound.playto")] public static void PlayTo(PlayerLib.Player players, string sound, float volume = 1, float pitch = 1, SoundSource source = SoundSource.Master) { }
+                /// Stops a sound (or every sound) for players.
+                [MCS.Intrinsic("sound.stop")] public static void Stop(PlayerLib.Player players, string sound = null) { }
+            }
+        }
+
+        namespace NbtLib
+        {
+            /// NBT data storage. path: an NBT path ("a.b[0]"). storage: a storage id (default "<namespace>:data").
+            /// T: int, bool, Milli, Q16, NString (and string constants for Set).
+            public static class Storage
+            {
+                [MCS.Intrinsic("storage.get")] public static T Get<T>(string path, string storage = null) => default;
+                [MCS.Intrinsic("storage.set")] public static void Set<T>(string path, T value, string storage = null) { }
+                /// Sets an SNBT value: Storage.SetNbt("cfg", "{a:1,b:[2,3]}")
+                [MCS.Intrinsic("storage.setnbt")] public static void SetNbt(string path, string snbt, string storage = null) { }
+                [MCS.Intrinsic("storage.has")] public static bool Has(string path, string storage = null) => false;
+                [MCS.Intrinsic("storage.remove")] public static void Remove(string path, string storage = null) { }
+                [MCS.Intrinsic("storage.copy")] public static void Copy(string from, string to, string storage = null) { }
+                /// List size / string length / compound size (data get).
+                [MCS.Intrinsic("storage.count")] public static int Count(string path, string storage = null) => 0;
+                [MCS.Intrinsic("storage.merge")] public static void Merge(string snbt, string storage = null) { }
+            }
+
+            /// NBT of entities (an Entity or entity reference) and block entities (a Position).
+            public static class Nbt
+            {
+                [MCS.Intrinsic("nbt.get")] public static T Get<T>(object entity, string path) => default;
+                [MCS.Intrinsic("nbt.get")] public static T Get<T>(MCS.Position block, string path) => default;
+                [MCS.Intrinsic("nbt.set")] public static void Set<T>(object entity, string path, T value) { }
+                [MCS.Intrinsic("nbt.set")] public static void Set<T>(MCS.Position block, string path, T value) { }
+                [MCS.Intrinsic("nbt.has")] public static bool Has(object entity, string path) => false;
+                [MCS.Intrinsic("nbt.has")] public static bool Has(MCS.Position block, string path) => false;
+                [MCS.Intrinsic("nbt.remove")] public static void Remove(object entity, string path) { }
+                [MCS.Intrinsic("nbt.remove")] public static void Remove(MCS.Position block, string path) { }
+                [MCS.Intrinsic("nbt.merge")] public static void Merge(object entity, string snbt) { }
+                [MCS.Intrinsic("nbt.merge")] public static void Merge(MCS.Position block, string snbt) { }
+                /// Copies NBT into data storage: Nbt.Save(e, "Inventory", "inv") → <namespace>:data inv
+                [MCS.Intrinsic("nbt.save")] public static void Save(object entity, string path, string storagePath, string storage = null) { }
+                [MCS.Intrinsic("nbt.save")] public static void Save(MCS.Position block, string path, string storagePath, string storage = null) { }
+            }
+        }
+
+        namespace TeamLib
+        {
+            public enum Visibility { [MCS.McId("always")] Always, [MCS.McId("never")] Never, [MCS.McId("hideForOtherTeams")] HideForOtherTeams, [MCS.McId("hideForOwnTeam")] HideForOwnTeam }
+            public enum Collision { [MCS.McId("always")] Always, [MCS.McId("never")] Never, [MCS.McId("pushOtherTeams")] PushOtherTeams, [MCS.McId("pushOwnTeam")] PushOwnTeam }
+
+            /// A team (created on load). Teams with the same name are the same team.
+            public sealed class Team
+            {
+                [MCS.Intrinsic("team.new")] public Team(string name, string displayName = null) { }
+                public TuiLib.Color Color { set { } }
+                public bool FriendlyFire { set { } }
+                public bool SeeFriendlyInvisibles { set { } }
+                public string Prefix { set { } }
+                public string Suffix { set { } }
+                public string DisplayName { set { } }
+                public Visibility NameTags { set { } }
+                public Visibility DeathMessages { set { } }
+                public Collision Collision { set { } }
+                /// Adds entities or players (an Entity or entity reference).
+                [MCS.Intrinsic("team.join")] public void Join(object who) { }
+                [MCS.Intrinsic("team.leave")] public void Leave(object who) { }
+                [MCS.Intrinsic("team.has")] public bool Has(object who) => false;
+                /// Number of members (entities and online players).
+                [MCS.Intrinsic("team.count")] public int Count => 0;
+                /// The players in the team.
+                [MCS.Intrinsic("team.players")] public PlayerLib.Player Players => null;
+                [MCS.Intrinsic("team.empty")] public void Empty() { }
+                [MCS.Intrinsic("team.remove")] public void Remove() { }
+            }
+
+            /// A scoreboard objective (created on load) with the exact name given.
+            public sealed class Objective
+            {
+                [MCS.Intrinsic("score.new")] public Objective(string name, string criteria = "dummy", string displayName = null) { }
+                /// The score of an entity / player (one target for reading) or a fake player name.
+                [MCS.Intrinsic("score.index")] public int this[object who] { get => 0; set { } }
+                [MCS.Intrinsic("score.index")] public int this[string holder] { get => 0; set { } }
+                [MCS.Intrinsic("score.add")] public void Add(object who, int amount) { }
+                [MCS.Intrinsic("score.add")] public void Add(string holder, int amount) { }
+                [MCS.Intrinsic("score.reset")] public void Reset(object who) { }
+                [MCS.Intrinsic("score.reset")] public void Reset(string holder) { }
+                [MCS.Intrinsic("score.has")] public bool Has(object who) => false;
+                [MCS.Intrinsic("score.has")] public bool Has(string holder) => false;
+                [MCS.Intrinsic("score.show")] public void Show(GuiLib.DisplaySlot slot = GuiLib.DisplaySlot.Sidebar) { }
             }
         }
 
@@ -296,6 +568,42 @@ public static class Prelude
                 [MCS.Intrinsic("obj.clone")] public Block Clone() => null;
                 /// Discards this object: it cannot be used any more.
                 [MCS.Intrinsic("obj.dispose")] public void Dispose() { }
+            }
+
+            public enum Direction { Up, Down, North, South, East, West }
+
+            /// A box of blocks between two corners (relative to the same position, or absolute).
+            /// Clone / Move / Stack copy blocks right away; Copy / Cut give a Clipboard to Paste later.
+            public sealed class Region
+            {
+                [MCS.Intrinsic("region.new")] public Region(MCS.Position from, MCS.Position to) { }
+                [MCS.Intrinsic("region.fill")] public bool Fill(string block) => false;
+                [MCS.Intrinsic("region.fill")] public bool Fill(Block block) => false;
+                [MCS.Intrinsic("region.replace")] public bool Replace(string from, string to) => false;
+                /// Fills the region with air.
+                [MCS.Intrinsic("region.clear")] public bool Clear() => false;
+                /// Copies the blocks to dest (the new lowest corner). masked: skip air.
+                [MCS.Intrinsic("region.clone")] public bool Clone(MCS.Position dest, bool masked = false) => false;
+                /// Moves the blocks to dest; the region becomes air.
+                [MCS.Intrinsic("region.move")] public bool Move(MCS.Position dest) => false;
+                /// Copies the region `count` times next to itself in a direction.
+                [MCS.Intrinsic("region.stack")] public bool Stack(Direction direction, int count = 1) => false;
+                /// Copies the region `count` times, each one (dx, dy, dz) further.
+                [MCS.Intrinsic("region.stack")] public bool Stack(int dx, int dy, int dz, int count = 1) => false;
+                /// A clipboard that pastes the region as it is when pasted.
+                [MCS.Intrinsic("region.copy")] public Clipboard Copy() => null;
+                /// A clipboard holding the blocks as they are now (saved into the buffer area, which must be free).
+                [MCS.Intrinsic("region.copy")] public Clipboard Copy(MCS.Position buffer) => null;
+                /// Moves the blocks into the buffer area and returns it as a clipboard (the region becomes air).
+                [MCS.Intrinsic("region.cut")] public Clipboard Cut(MCS.Position buffer) => null;
+                /// Whether the blocks at `other` are the same as in this region (execute if blocks).
+                [MCS.Intrinsic("region.same")] public bool Matches(MCS.Position other, bool masked = false) => false;
+            }
+
+            public sealed class Clipboard
+            {
+                /// Pastes the blocks with the lowest corner at dest. masked: skip air.
+                [MCS.Intrinsic("clip.paste")] public bool Paste(MCS.Position dest, bool masked = false) => false;
             }
         }
 
@@ -524,6 +832,15 @@ public static class Prelude
             [MCS.Intrinsic("mount")] public static bool Mount(bool variable, string objective, string holder) => true;
             /// Binds a scoreboard class (class X : dummy) to an objective name.
             [MCS.Intrinsic("mount")] public static bool Mount(System.Type scoreboard, string objective) => true;
+            /// Binds an Entity (or entity reference) variable to an existing entity: a tag ("boss"), a selector
+            /// ("@e[type=minecraft:zombie,limit=1]") or a UUID. Compile-time, like Mount.
+            [MCS.Intrinsic("mount.entity")] public static bool MountEntity(EntityLib.Entity variable, string target) => true;
+            [MCS.Intrinsic("mount.entity")] public static bool MountEntity(MCS.EntityObject variable, string target) => true;
+            /// Binds a block variable to the block at a position: reading its states checks the world, setting them
+            /// places the block there.
+            [MCS.Intrinsic("mount.block")] public static bool MountBlock(BlockLib.Block variable, MCS.Position pos) => true;
+            /// Runs a function of any datapack (or a #tag) and returns its result.
+            [MCS.Intrinsic("call")] public static int Call(string function) => 0;
             [MCS.Intrinsic("reload")] public static void Reload() { }
 
             /// A raw execute condition, e.g. m.Check("block ~ ~ ~ minecraft:stone") → execute if block ...

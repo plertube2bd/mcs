@@ -30,7 +30,14 @@ public sealed partial class Codegen
             var model = comp.GetSemanticModel(tree);
             foreach (var inv in tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>())
             {
-                if (Intrinsic(model.GetSymbolInfo(inv).Symbol) != "mount") continue;
+                var kind = Intrinsic(model.GetSymbolInfo(inv).Symbol);
+                if (kind is "mount.entity" or "mount.block")
+                {
+                    try { CollectEntityMount(model, inv, kind); }
+                    catch (UnsupportedException e) { Error(e.Node, e.Message); }
+                    continue;
+                }
+                if (kind != "mount") continue;
                 try { CollectMount(model, inv); }
                 catch (UnsupportedException e) { Error(e.Node, e.Message); }
             }

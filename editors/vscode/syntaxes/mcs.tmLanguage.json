@@ -27,6 +27,11 @@
           "include": "#asm-block"
         },
         {
+          "comment": "MC# number / runtime types",
+          "match": "\\b(Milli|Q16|NString|NArray)\\b",
+          "name": "storage.type.mcs"
+        },
+        {
           "include": "#asm-interpolated"
         },
         {

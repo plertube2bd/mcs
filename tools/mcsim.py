@@ -717,22 +717,66 @@ class Sim:
         if t[1] == 'modify' and t[2] == 'storage':
             rl, path, action = t[3], t[4], t[5]
             root = self.storage.setdefault(rl, {})
-            rest = cmd.split(' ', 7)
-            if action == 'set' and t[6] == 'value':
-                nbt_set(root, path, Snbt.parse(rest[7]))
-            elif action == 'set' and t[6] == 'from' and t[7] == 'storage':
-                v = nbt_get(self.storage.get(t[8], {}), t[9])
+            j = 6
+            index = None
+            if action == 'insert':
+                index, j = int(t[6]), 7
+            src = t[j]
+            if src == 'value':
+                value = Snbt.parse(cmd.split(' ', j + 1)[j + 1])
+            elif src == 'from' and t[j + 1] == 'storage':
+                value = nbt_get(self.storage.get(t[j + 2], {}), t[j + 3])
+                if value is None:
+                    raise CommandError(f'Found no elements matching {t[j + 3]}')
+                value = json.loads(json.dumps(value))
+            elif src == 'string' and t[j + 1] == 'storage':
+                v = nbt_get(self.storage.get(t[j + 2], {}), t[j + 3])
                 if v is None:
-                    raise CommandError(f'Found no elements matching {t[9]}')
-                nbt_set(root, path, json.loads(json.dumps(v)))
-            elif action == 'append' and t[6] == 'value':
+                    raise CommandError(f'Found no elements matching {t[j + 3]}')
+                text = v if isinstance(v, str) else nbt_text(v)
+                n = len(text)
+                a = int(t[j + 4]) if len(t) > j + 4 else 0
+                b = int(t[j + 5]) if len(t) > j + 5 else n
+                a, b = (a if a >= 0 else n + a), (b if b >= 0 else n + b)
+                if not (0 <= a <= b <= n):
+                    raise CommandError(f'Invalid substring indices: {a} to {b} (length {n})')
+                value = text[a:b]
+            else:
+                self.log(cmd)
+                return 1
+            if action == 'set':
+                if nbt_get(root, path) == value and type(nbt_get(root, path)) is type(value):
+                    return 0                              # "Nothing changed": the command fails (silently in functions)
+                nbt_set(root, path, value)
+            elif action in ('append', 'prepend', 'insert'):
                 lst = nbt_get(root, path)
                 if lst is None:
                     nbt_set(root, path, [])
                     lst = nbt_get(root, path)
-                lst.append(Snbt.parse(rest[7]))
+                if not isinstance(lst, list):
+                    raise CommandError(f'{path} is not a list')
+                if action == 'append':
+                    lst.append(value)
+                elif action == 'prepend':
+                    lst.insert(0, value)
+                else:
+                    if not -len(lst) - 1 <= index <= len(lst):
+                        raise CommandError(f'Index {index} out of bounds')
+                    lst.insert(index if index >= 0 else len(lst) + 1 + index, value)
+            elif action == 'merge' and isinstance(value, dict):
+                cur = nbt_get(root, path)
+                if not isinstance(cur, dict):
+                    nbt_set(root, path, {})
+                    cur = nbt_get(root, path)
+                cur.update(value)
             else:
                 self.log(cmd)
+            return 1
+        if t[1] == 'merge' and t[2] == 'storage':
+            root = self.storage.setdefault(t[3], {})
+            value = Snbt.parse(cmd.split(' ', 4)[4])
+            if isinstance(value, dict):
+                root.update(value)
             return 1
         if t[2] == 'entity' and t[1] in ('modify', 'get'):
             sel, i = selector_at(t, 3)
@@ -942,6 +986,10 @@ class Sim:
                 typ, scale = s[4], s[5]
                 val = v * scale
                 val = float(val) if typ in ('float', 'double') else int(val)
+                if typ == 'float':
+                    val = shortest_f32(val)
+                elif typ in ('byte', 'short', 'int', 'long'):
+                    val = int(math.floor(v * scale))
                 nbt_set(self.storage.setdefault(s[2], {}), s[3], val)
             elif s[1] == 'bossbar':
                 self.bossbars.setdefault(s[2], {})[s[3]] = int(v)
@@ -1156,6 +1204,16 @@ def item_matches(item, pred):
         if not (nbt_matches(want, item['custom']) if mm.group(1) == '~' else want == item['custom']):
             return False
     return True
+
+
+def shortest_f32(x):
+    """A float rounded to 32 bits, as the shortest decimal that reads back to it (like Java's Float.toString)."""
+    f = f32(x)
+    for digits in range(1, 10):
+        d = float(f'{f:.{digits}g}')
+        if f32(d) == f:
+            return d
+    return f
 
 
 def f32(x):

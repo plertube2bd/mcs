@@ -176,5 +176,52 @@
       "$1.RotationY = ${5:90f};",
       "$1.Animate(${6:20});$0"
     ]
+  },
+  "Class": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Vec} {",
+      "\tpublic int ${2:X}, ${3:Y};",
+      "\tpublic $1(int x, int y) { $2 = x; $3 = y; }",
+      "\tpublic override string ToString() => \\$\"(\\{$2\\}, \\{$3\\})\";",
+      "}"
+    ],
+    "description": "A plain class (fields are scores)"
+  },
+  "NString": {
+    "prefix": "nstr",
+    "body": [
+      "NString ${1:name} = \\$\"${2:text}\";"
+    ],
+    "description": "A runtime string (NBT storage)"
+  },
+  "NArray": {
+    "prefix": "narr",
+    "body": [
+      "var ${1:list} = new NArray<${2:int}>();",
+      "$1.Add(${3:1});"
+    ],
+    "description": "A runtime array (NBT storage)"
+  },
+  "External function": {
+    "prefix": "external",
+    "body": [
+      "[External(\"${1:other}:${2:path}\")] static extern ${3:void} ${4:Name}($5);"
+    ],
+    "description": "A function of another datapack"
+  },
+  "Team": {
+    "prefix": "team",
+    "body": [
+      "static Team ${1:red} = new Team(\"${2:red}\") { Color = Color.${3:Red} };"
+    ],
+    "description": "A team (TeamLib)"
+  },
+  "Region": {
+    "prefix": "region",
+    "body": [
+      "var ${1:r} = new Region(new Position(${2:0, 64, 0}), new Position(${3:4, 68, 4}));"
+    ],
+    "description": "A region of blocks (BlockLib)"
   }
 }

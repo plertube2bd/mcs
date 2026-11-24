@@ -5,7 +5,7 @@ use BlockLib;
 use MathLib;
 
 static int score = 42;
-static double speed = 1.25;
+static Q16 speed = 1.25;
 
 public static void Main() {
     var label = new TextDisplay("Hello") { Billboard = Billboard.Center, Background = 0x40000000, TextOpacity = 200, Shadow = true };
@@ -17,8 +17,8 @@ public static void Main() {
     stairs.Facing = Facing.East;
     var cube = new BlockDisplay(stairs) { Scale = 0.5f, Brightness = 15, RotationY = 45f };
     m.SpawnEntityObject(cube, Position.Here);
-    float s = 2f;
-    float deg = 90f;
+    Milli s = 2f;
+    Milli deg = 90f;
     cube.Scale = s;
     cube.RotationY = deg;
     cube.Animate(20);

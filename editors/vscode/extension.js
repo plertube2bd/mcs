@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const DIAG = /^(.*)\((\d+),(\d+)\): error MCS: (.*)$/;
+const DIAG = /^(.*)\((\d+),(\d+)\): (error|warning) MCS: (.*)$/;
 let collection, output, statusItem;
 const timers = new Map();      // document uri → pending timeout
 const running = new Map();     // run key → child process
@@ -137,10 +137,12 @@ function publish(key, doc, cwd, text, code) {
         if (m) {
             const file = path.resolve(cwd, m[1]);
             const ln = Math.max(0, +m[2] - 1), col = Math.max(0, +m[3] - 1);
-            let msg = m[4], codeId;
+            let msg = m[5], codeId;
             const c = /^(CS\d+): (.*)$/s.exec(msg);
             if (c) { codeId = c[1]; msg = c[2]; }
-            const d = new vscode.Diagnostic(rangeAt(file, ln, col), msg, vscode.DiagnosticSeverity.Error);
+            const severity = m[4] === 'warning' ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error;
+            const d = new vscode.Diagnostic(rangeAt(file, ln, col), msg, severity);
+            if (m[4] === 'warning' && /deprecated/.test(msg)) d.tags = [vscode.DiagnosticTag.Deprecated];
             d.source = 'MC#';
             if (codeId) d.code = codeId;
             if (!byFile.has(file)) byFile.set(file, []);

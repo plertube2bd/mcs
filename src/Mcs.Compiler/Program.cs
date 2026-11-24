@@ -15,6 +15,8 @@ public static class Program
 
         options:
           --mc <version|min-max>   Target Minecraft version (default: 1.20.1-26.3)
+          --division <mode>        csharp (default: / rounds toward zero) or minecraft (one scoreboard
+                                   operation, rounds toward −∞ — faster)
                                    e.g. --mc 1.21.4, --mc 1.20.2-1.21.11
           -o, --out <dir>          Output datapack folder (default: out/<namespace>)
           -n, --namespace <ns>     Datapack namespace (default: name of the first file)
@@ -25,7 +27,8 @@ public static class Program
           --versions               List supported versions and #if symbols
 
         mcs.json:
-          { "namespace": "hello", "sources": ["src/*.mcs"], "output": "out/hello", "minecraft": "1.20.1-26.3", "resources": "res" }
+          { "namespace": "hello", "sources": ["src/*.mcs"], "output": "out/hello", "minecraft": "1.20.1-26.3", "resources": "res",
+            "division": "csharp" }
         """;
 
     public static int Main(string[] argv)
@@ -37,7 +40,7 @@ public static class Program
     static int Run(string[] argv)
     {
         var files = new List<string>();
-        string? outDir = null, ns = null, mc = null, res = null, desc = null;
+        string? outDir = null, ns = null, mc = null, res = null, desc = null, division = null;
         bool emitCs = false, check = false;
         string? stdinFile = null;
 
@@ -46,7 +49,7 @@ public static class Program
             bool explicitFile = argv.Length > 1 && !argv[1].StartsWith('-');
             var proj = Project.Load(explicitFile ? argv[1] : "mcs.json");
             files.AddRange(proj.Files);
-            ns = proj.Namespace; outDir = proj.Output; mc = proj.Minecraft; res = proj.Resources; desc = proj.Description;
+            ns = proj.Namespace; outDir = proj.Output; mc = proj.Minecraft; res = proj.Resources; desc = proj.Description; division = proj.Division;
             argv = argv.Skip(explicitFile ? 2 : 1).ToArray(); // CLI options override the project file
         }
 
@@ -58,6 +61,7 @@ public static class Program
                 case "-o" or "--out": outDir = Next(); break;
                 case "-n" or "--namespace": ns = Next(); break;
                 case "--mc": mc = Next(); break;
+                case "--division": division = Next(); break;
                 case "-r" or "--resources": res = Next(); break;
                 case "--emit-csharp": emitCs = true; break;
                 case "--check": check = true; break;
@@ -79,10 +83,16 @@ public static class Program
         string? stdinText = stdinFile != null ? Console.In.ReadToEnd() : null;
         bool IsStdin(string f) => stdinFile != null && Path.GetFullPath(f) == Path.GetFullPath(stdinFile);
         if (stdinFile != null && !files.Any(IsStdin)) files.Add(stdinFile);   // a new file not in the project yet
-        var result = Compiler.Compile(files.Select(f => (f, IsStdin(f) ? stdinText! : File.ReadAllText(f))).ToList(), ns, min, max);
+        var opts = new CompileOptions(MinecraftDivision: (division ?? "csharp").ToLowerInvariant() switch
+        {
+            "csharp" or "c#" => false,
+            "minecraft" or "floor" => true,
+            _ => throw new CompileException($"Unknown division mode '{division}' (csharp or minecraft)."),
+        });
+        var result = Compiler.Compile(files.Select(f => (f, IsStdin(f) ? stdinText! : File.ReadAllText(f))).ToList(), ns, min, max, opts);
         if (emitCs) foreach (var (f, cs) in result.Preprocessed) Console.WriteLine($"// ==== {f}\n{cs}");
         foreach (var d in result.Diagnostics) Console.Error.WriteLine(d);
-        if (result.Layers == null) { Console.Error.WriteLine($"Build failed: {result.Diagnostics.Count} error(s)"); return 1; }
+        if (result.Layers == null) { Console.Error.WriteLine($"Build failed: {result.Diagnostics.Count(d => !d.Warning)} error(s)"); return 1; }
         if (check) { Console.WriteLine("Check succeeded"); return 0; }
 
         DatapackWriter.Write(outDir, ns, desc ?? $"MC# datapack: {ns} ({min}-{max})", result.Layers);
@@ -120,6 +130,7 @@ public sealed class Project
     public string? Minecraft { get; set; }
     public string? Resources { get; set; }
     public string? Description { get; set; }
+    public string? Division { get; set; }
     public List<string> Files { get; private set; } = new();
 
     public static Project Load(string file)
@@ -159,8 +170,9 @@ public sealed record CompileResult(List<(string file, string csharp)> Preprocess
 
 public static class Compiler
 {
-    public static CompileResult Compile(List<(string path, string source)> sources, string ns, McVersion min, McVersion max)
+    public static CompileResult Compile(List<(string path, string source)> sources, string ns, McVersion min, McVersion max, CompileOptions? opts = null)
     {
+        var warnings = new List<Diag>();
         var pre = sources.Select(s => (s.path, Preprocessor.Process(s.source))).ToList();
         var refs = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
             .Where(p => Path.GetFileName(p) is "System.Runtime.dll" or "System.Private.CoreLib.dll" or "netstandard.dll" or "System.Collections.dll" or "System.Linq.dll")
@@ -183,6 +195,7 @@ public static class Compiler
         {
             var parseOpts = CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Latest).WithPreprocessorSymbols(g.Symbols);
             var userTrees = MountRewriter.Apply(pre.Select(p => CSharpSyntaxTree.ParseText(p.Item2, parseOpts, p.path)).ToList());
+            if (g == groups[0]) warnings.AddRange(Deprecations(userTrees));
             var trees = new List<SyntaxTree>(userTrees);
             trees.AddRange(preludeTrees);
             var comp = CSharpCompilation.Create("mcs_user", trees, refs,
@@ -196,9 +209,10 @@ public static class Compiler
             }).ToList();
             if (errs.Count == 0)
             {
-                var gen = new Codegen(comp, userTrees, ns, g);
+                var gen = new Codegen(comp, userTrees, ns, g, opts);
                 var pack = gen.Run();
                 errs = gen.Diags;
+                foreach (var w in gen.Warnings) if (!warnings.Contains(w)) warnings.Add(w);
                 if (errs.Count == 0) built.Add((g, pack));
             }
             diags.AddRange(errs.Select(e => (e, g)));
@@ -214,8 +228,22 @@ public static class Compiler
                 string where = string.Join(", ", gs.Select(x => x.Name));
                 return gr.Key with { Message = gr.Key.Message.StartsWith('[') ? gr.Key.Message : $"[{where}] {gr.Key.Message}" };
             }).OrderBy(d => d.File).ThenBy(d => d.Line).ToList();
-            return new(pre, merged, null);
+            return new(pre, warnings.Concat(merged).ToList(), null);
         }
-        return new(pre, new(), DatapackWriter.Merge(built));
+        return new(pre, warnings, DatapackWriter.Merge(built));
+    }
+
+    /// float / double still work, but the MC# names are Milli (×1000 fixed point) and Q16 (Q15.16 fixed point).
+    static IEnumerable<Diag> Deprecations(List<SyntaxTree> trees)
+    {
+        foreach (var t in trees)
+            foreach (var p in t.GetRoot().DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.PredefinedTypeSyntax>())
+            {
+                string? repl = p.Keyword.Kind() switch { SyntaxKind.FloatKeyword => "Milli", SyntaxKind.DoubleKeyword => "Q16", _ => null };
+                if (repl == null) continue;
+                var span = p.GetLocation().GetMappedLineSpan();
+                yield return new Diag(span.Path, span.StartLinePosition.Line + 1, span.StartLinePosition.Character + 1,
+                    $"'{p.Keyword.Text}' is deprecated: use {repl}. '{p.Keyword.Text}' still works for now, but may be removed in any future version.", true);
+            }
     }
 }

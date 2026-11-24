@@ -248,6 +248,14 @@ public sealed partial class Codegen
             if (TryConstString(x) is string cs) { sb.Append(cs); continue; }
             var k = Kind(cur.Model.GetTypeInfo(x).Type);
             if (k == VK.Ref) { sb.Append(GetRef(x).Selector); continue; }
+            if (k == VK.Entity) { sb.Append(Sel(GetEnt(x))); continue; }
+            if (k == VK.NStr)
+            {
+                string name = $"s{strArgs++}";
+                Emit($"data modify storage {Storage} arg.{name} set from storage {Storage} {StrPath(x)}");
+                sb.Append($"$({name})"); force = true;
+                continue;
+            }
             if (k == VK.String && x is ElementAccessExpressionSyntax ea && ArrayOf(ea.Expression) is IFieldSymbol af)
             {
                 string name = $"s{strArgs++}";
@@ -403,8 +411,9 @@ public sealed partial class Codegen
             return;
         }
         if (ArrOf(fe.Expression) is ArrVar fa) { EmitArrayForEach(fe, fa, (ILocalSymbol)loopSym); return; }
+        if (Kind(cur.Model.GetTypeInfo(fe.Expression).Type) == VK.NArr) { EmitNArrForEach(fe, GetNArr(fe.Expression), (ILocalSymbol)loopSym); return; }
         if (fe.Expression is not InvocationExpressionSyntax src || cur.Model.GetSymbolInfo(src).Symbol is not IMethodSymbol m || Intrinsic(m) != "ents.all")
-            throw new UnsupportedException(fe.Expression, "foreach works over Entities.All<T>(...), Unroll.Range(...), an array or a static readonly array.");
+            throw new UnsupportedException(fe.Expression, "foreach works over Entities.All<T>(...), Unroll.Range(...), an array, an NArray or a static readonly array.");
         var args = src.ArgumentList.Arguments;
         var t = m.TypeArguments[0];
         string sel = ClassOf(t)!.BaseSelector;

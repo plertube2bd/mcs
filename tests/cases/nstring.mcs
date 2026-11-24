@@ -1,0 +1,73 @@
+// Runtime strings (NString) and runtime arrays (NArray<T>) in NBT storage.
+// @mc 1.20.2-26.3
+use NbtLib;
+
+static NString title = "MC#";
+static NArray<int> log = new NArray<int> { 1, 2 };
+
+static NString Greet(NString who) => "Hello, " + who + "!";
+
+class Player2 {
+    public NString Name = "nobody";
+    public NArray<int> Scores = new NArray<int>();
+    public int Best() {
+        int b = 0;
+        foreach (int s in Scores) if (s > b) b = s;
+        return b;
+    }
+}
+
+public static void Main() {
+    NString s = "abc";
+    int hp = 17;
+    NString t = $"hp={hp} s={s}";
+    m.Console.WriteLine(t);
+    s += "def";
+    m.Console.WriteLine($"s={s} len={s.Length} sub={s.Substring(1, 3)} c={s[4]} tail={s.Substring(4)}");
+    m.Console.WriteLine($"eq={s == "abcdef"} ne={s != "abcdef"} starts={s.StartsWith("ab")} ends={s.EndsWith("ef")} no={s.StartsWith("x")}");
+    m.Console.WriteLine($"idx={s.IndexOf("cd")} miss={s.IndexOf("zz")} has={s.Contains("bc")}");
+    NString num = "1234";
+    m.Console.WriteLine($"toint={num.ToInt() + 1} greet={Greet(title)}");
+
+    NArray<int> a = new NArray<int>();
+    a.Add(5); a.Add(hp); a.Add(-3);
+    a.Insert(1, 99);
+    int i = 2;
+    a[i] += 1;
+    a[0] = a[0] * 10;
+    m.Console.WriteLine($"a={a} len={a.Length} a[i]={a[i]} last={a[-1]}");
+    a.RemoveAt(0);
+    int pop = a.Pop();
+    int sum = 0;
+    foreach (int x in a) sum += x;
+    m.Console.WriteLine($"after={a} pop={pop} sum={sum}");
+
+    var names = new NArray<NString> { "ann", "bob" };
+    names.Add(s);
+    names[1] = "BOB";
+    NString n0 = names[0];
+    m.Console.WriteLine($"names={names} n0={n0} n2={names[2]}");
+
+    var fs = new NArray<Milli>(2);
+    fs[1] = 2.5f;
+    fs[0] = fs[1] * 2;
+    m.Console.WriteLine($"fs0={fs[0]} fs1={fs[1]}");
+
+    log.Add(3);
+    m.Console.WriteLine($"log={log}");
+
+    var p = new Player2 { Name = "Steve" };
+    p.Scores.Add(4); p.Scores.Add(9); p.Scores.Add(2);
+    m.Console.WriteLine($"{p.Name} best={p.Best()}");
+
+    Storage.Set("cfg.level", 3);
+    Storage.Set("cfg.speed", 1.5f);
+    Storage.Set("cfg.name", s);
+    Storage.SetNbt("cfg.list", "[1,2,3]");
+    int lv = Storage.Get<int>("cfg.level");
+    Milli sp = Storage.Get<Milli>("cfg.speed");
+    NString nm = Storage.Get<NString>("cfg.name");
+    m.Console.WriteLine($"lv={lv} sp={sp} nm={nm} has={Storage.Has("cfg.level")} cnt={Storage.Count("cfg.list")}");
+    Storage.Remove("cfg.level");
+    m.Console.WriteLine($"gone={!Storage.Has("cfg.level")}");
+}

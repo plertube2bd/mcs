@@ -37,7 +37,7 @@ public static void Main() {
     }
     m.Console.WriteLine($"Even sum 1..10 = {sum}, Fib(10) = {Fib(10)}");
 
-    float speed = 1.5f;
+    Milli speed = 1.5f;
     speed = speed * 2 + 0.25f;
     m.Console.WriteLine($"speed = {speed}, big = {sum > 20 && k == 11}");
 

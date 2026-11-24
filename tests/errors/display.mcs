@@ -4,7 +4,7 @@ static int score = 1;
 static void Main() {
     var t = new TextDisplay("a") { TeleportDuration = 3 };
     t.Text = $"{score}";
-    float a = 10f;
+    Milli a = 10f;
     t.RotationY = a;
 }
 // @error TeleportDuration needs Minecraft 1.20.2+

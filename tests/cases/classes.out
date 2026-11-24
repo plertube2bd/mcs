@@ -1,0 +1,9 @@
+[t0] a=(3, 4) len2=25
+[t0] a.X=10
+[t0] a=(22, 10)
+[t0] grown=122
+[t0] c=(7, 7) make=2
+[t0] area=8
+[t0] tri=3,30 sq=4,99 id=7
+[t0] count=3 step=0.500
+[t0] Counter(Count: 41, Step: 0.500)

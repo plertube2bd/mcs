@@ -29,7 +29,8 @@ public sealed partial class Codegen
     void InitEntityObject(EntVar ev, BaseObjectCreationExpressionSyntax oc)
     {
         var type = cur.Model.GetTypeInfo(oc).Type!;
-        if (DisplayTypeId(type) is { } id)
+        if (type.Name == "Interaction" && type.ContainingNamespace?.ToDisplayString() == "EntityLib") ev.TypeId = ResolveId("entities", "interaction", oc);
+        else if (DisplayTypeId(type) is { } id)
         {
             ev.TypeId = id;
             string content = type.Name switch { "BlockDisplay" => "Block", "ItemDisplay" => "Item", _ => "Text" };

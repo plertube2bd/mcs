@@ -6,12 +6,15 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Mcs.Compiler;
 
-public enum VK { Int, Bool, Fixed, Double, Array, String, Entity, Position, Block, Ref, Button, Text, Gui, Item, Void, Unsupported }
+public enum VK { Int, Bool, Fixed, Double, Array, String, Entity, Position, Block, Ref, Button, Text, Gui, Item, Obj, NStr, NArr, Region, Team, Void, Unsupported }
 
-public sealed record Diag(string File, int Line, int Col, string Message)
+public sealed record Diag(string File, int Line, int Col, string Message, bool Warning = false)
 {
-    public override string ToString() => $"{File}({Line},{Col}): error MCS: {Message}";
+    public override string ToString() => $"{File}({Line},{Col}): {(Warning ? "warning" : "error")} MCS: {Message}";
 }
+
+/// Project-wide options (mcs.json / command line).
+public sealed record CompileOptions(bool MinecraftDivision = false);
 
 sealed class UnsupportedException(SyntaxNode node, string message) : Exception(message)
 {
@@ -32,6 +35,7 @@ sealed class EntVar(string tag) : Var
     public string Tag = tag;
     public string? TypeId;              // minecraft:zombie; known only for entities created with new
     public bool Spawned;                // after a spawn, property writes are emitted directly
+    public string? Selector;            // m.MountEntity: an existing entity (selector instead of the tag)
     public List<string> Deferred = new(); // pre-spawn property writes, applied after summon
 }
 
@@ -45,13 +49,16 @@ sealed record Cond(List<string> Parts, bool? Const)
 sealed class FnInfo
 {
     public required IMethodSymbol Sym;
-    public required MethodDeclarationSyntax Decl;
+    public required BaseMethodDeclarationSyntax Decl;
     public required string Prefix;   // main, foo.bar
     public required string Path;     // ns:main, ns:foo/bar
     public Dictionary<IParameterSymbol, Var> Params = new(SymbolEqualityComparer.Default);
     public required string Obj;
     public string Ret => $"${Prefix}#ret {Obj}";
     public string Ctl => $"${Prefix}#ctl {Obj}";
+    public ObjVar? ThisObj;          // instance methods / constructors of plain classes: the `this` frame
+    public Var? RetVal;              // class / NString / NArray return value
+    public Dictionary<ITypeParameterSymbol, ITypeSymbol>? Subst;   // generic instance: type parameter → type
 }
 
 sealed class LoopCtx { public bool HasBreak, HasContinue, IsEntity, IsWait; }
@@ -69,6 +76,7 @@ sealed class FnCtx(FnInfo info, SemanticModel model)
     public bool WaitCtl;       // uses Wait() and may return early: continuation calls check the ctl flag
     public int Depth;          // execution depth (each entity foreach / Exec.Run changes @s)
     public RefVar? This;       // instance methods of entity classes
+    public ObjVar? ThisObj;    // instance methods of plain classes
     // objects (entity / block / item): created where, consumed / disposed where (compile-time single-use rule)
     public Dictionary<Var, (int depth, string? flag)> Objects = new(ReferenceEqualityComparer.Instance);
     public Dictionary<Var, SyntaxNode> Consumed = new(ReferenceEqualityComparer.Instance);
@@ -110,6 +118,8 @@ public sealed partial class Codegen
     readonly TargetProfile prof;
     readonly CompiledPack pack = new();
     public List<Diag> Diags { get; } = new();
+    public List<Diag> Warnings { get; } = new();
+    readonly CompileOptions opts;
 
     readonly Dictionary<IMethodSymbol, FnInfo> fns = new(SymbolEqualityComparer.Default);
     readonly Dictionary<IFieldSymbol, ScoreVar> statics = new(SymbolEqualityComparer.Default);
@@ -123,9 +133,9 @@ public sealed partial class Codegen
     string Storage => $"{ns}:mcs";
     string WorldSpawnTag => $"mcs.{ns}.spawn";
 
-    public Codegen(CSharpCompilation comp, IReadOnlyList<SyntaxTree> userTrees, string ns, TargetProfile prof)
+    public Codegen(CSharpCompilation comp, IReadOnlyList<SyntaxTree> userTrees, string ns, TargetProfile prof, CompileOptions? opts = null)
     {
-        this.comp = comp; this.userTrees = userTrees; this.ns = ns; this.prof = prof;
+        this.comp = comp; this.userTrees = userTrees; this.ns = ns; this.prof = prof; this.opts = opts ?? new();
     }
 
     public CompiledPack Run()
@@ -145,43 +155,38 @@ public sealed partial class Codegen
             {
                 var sym = model.GetDeclaredSymbol(md)!;
                 if (HasAttr(sym, "InlineAttribute")) continue;   // expanded at each call site
-                if (!sym.IsStatic && !IsEntityClass(sym.ContainingType)) { Error(md.Identifier, "Instance methods are only supported in entity classes ([Entity])."); continue; }
-                string prefix = MethodPrefix(sym);
-                while (fns.Values.Any(f => f.Prefix == prefix)) prefix += "_";
-                var info = new FnInfo { Sym = sym, Decl = md, Prefix = prefix, Path = $"{ns}:{prefix.Replace('.', '/')}", Obj = Obj };
-                bool badParam = false;
-                foreach (var p in sym.Parameters)
-                {
-                    try {
-                    info.Params[p] = Kind(p.Type) switch
-                    {
-                        VK.Int or VK.Bool or VK.Fixed or VK.Double => new ScoreVar(H($"${prefix}.{p.Name}"), Kind(p.Type)),
-                        VK.Entity => new EntVar($"mcs.{ns}.{prefix}.{p.Name}") { Spawned = true },
-                        VK.Array => Unsup<Var>(md, $"Array parameters ({p.Name}) are only supported in [Inline] methods — or use a static array field."),
-                        VK.Ref => new RefVar($"{(ClassOf(p.Type)?.IsPlayer == true ? "@a" : "@e")}[tag=mcs.{ns}.{prefix}.{p.Name}]") { Tag = $"mcs.{ns}.{prefix}.{p.Name}", Type = p.Type },
-                        _ => Unsup<Var>(md, $"Unsupported parameter type: {p.Type}"),
-                    };
-                    } catch (UnsupportedException e) { Error(p.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() ?? e.Node, e.Message); badParam = true; }
-                }
-                if (!badParam) fns[sym] = info;
+                if (sym.IsExtern || HasAttr(sym, "ExternalAttribute")) { RegisterExtern(sym, md); continue; }
+                if (md.Body == null && md.ExpressionBody == null) continue;   // abstract / partial declarations
+                if (IsTemplate(sym)) continue;                   // generic: compiled per type arguments on first use
+                if (sym is { Name: "ToString", IsOverride: true }) continue;   // evaluated where an object is printed
+                if (!sym.IsStatic && sym.ContainingType.IsAbstract) continue;  // compiled for each class that inherits it
+                if (!sym.IsStatic && !IsEntityClass(sym.ContainingType) && !IsUserClass(sym.ContainingType)) { Error(md.Identifier, "Instance methods are only supported in classes and entity classes ([Entity])."); continue; }
+                try { fns[sym] = MakeFn(sym, md); }
+                catch (UnsupportedException e) { Error(e.Node, e.Message); }
             }
         }
 
         CollectClickObjects();   // before any item stack is generated
+        CheckClassLayouts();
 
         FindRecursion();
 
-        // 2. Generate functions
-        foreach (var info in fns.Values)
+        // 2. Generate functions (generic instances and constructors are generated as they are first used)
+        foreach (var info in fns.Values.ToList())
         {
             var model = comp.GetSemanticModel(info.Decl.SyntaxTree);
             GenFunction(info, model);
         }
+        GenerateInstances();
 
         // 3. Load function and tags
         var load = new List<string> { $"scoreboard objectives add {Obj} dummy" };
         // top-level asm runs first, in source order (e.g. creating objectives that m.Mount uses)
         foreach (var f in fns.Values.Where(f => f.Sym.Name.StartsWith(Preprocessor.TopAsmPrefix))) load.Add($"function {f.Path}");
+        load.AddRange(nbtStaticInits);
+        FinishStaticObjects(load);
+        FinishStrings();
+        FinishTeams(load);
         FinishLibs(load);
         FinishMath();
         FinishGui(load);
@@ -238,13 +243,19 @@ public sealed partial class Codegen
         if (f.Name.StartsWith(Preprocessor.MountFieldPrefix)) return;   // a top-level m.Mount(...)
         if (f.IsStatic && (mounts.ContainsKey(f) || IsDummyClass(f.ContainingType))) { DeclareMounted(model, f, v); return; }
         if (!f.IsStatic && IsEntityClass(f.ContainingType)) { ObjectiveOf(f); return; }   // per-entity score
+        if (!f.IsStatic && (IsUserClass(f.ContainingType) || f.ContainingType.IsGenericType)) return;   // object fields: laid out per object
         if (!f.IsStatic) { Error(v, "Only static fields (or fields of entity classes) are supported."); return; }
         if (f.IsReadOnly && f.Type is IArrayTypeSymbol) { DeclareArray(model, f, v); return; }
         var k = Kind(f.Type);
+        if (mountedStatics.ContainsKey(f)) { if (v.Initializer != null) Error(v.Initializer, "A mounted field cannot have an initializer."); return; }
         if (k == VK.Gui) { DeclareGuiStatic(model, f, v); return; }
         if (k == VK.Item) { DeclareItemStatic(model, f, v); return; }
         if (k == VK.Array) { DeclareArrayField(model, f, v); return; }
-        if (k is not (VK.Int or VK.Bool or VK.Fixed or VK.Double)) { Error(v, $"Unsupported static field type: {f.Type} (only int/bool/float/double are supported)"); return; }
+        if (k == VK.Obj) { DeclareObjStatic(model, f, v); return; }
+        if (k is VK.NStr or VK.NArr) { DeclareNbtStatic(model, f, v, k); return; }
+        if (k == VK.Team) { DeclareTeamStatic(model, f, v); return; }
+        if (k is VK.Entity or VK.Ref or VK.Block) { Error(v, $"Static {f.Type.Name} fields must be bound to the world with m.MountEntity / m.MountBlock (or use a local variable)."); return; }
+        if (k is not (VK.Int or VK.Bool or VK.Fixed or VK.Double)) { Error(v, $"Unsupported static field type: {f.Type} (int, bool, Milli, Q16, classes, NString, NArray, Team, Objective are supported)"); return; }
         string cls = f.ContainingType.Name == Preprocessor.GlobalClass ? "" : Snake(f.ContainingType.Name) + ".";
         var sv = new ScoreVar(H($"$static.{cls}{f.Name}"), k);
         statics[f] = sv;
@@ -261,7 +272,15 @@ public sealed partial class Codegen
     // ================================================================ function
     void GenFunction(FnInfo info, SemanticModel model)
     {
-        cur = new FnCtx(info, model);
+        var savedSubst = subst;
+        subst = info.Subst;
+        try { GenFunctionBody(info, model); }
+        finally { subst = savedSubst; }
+    }
+
+    void GenFunctionBody(FnInfo info, SemanticModel model)
+    {
+        cur = new FnCtx(info, model) { ThisObj = info.ThisObj };
         foreach (var (p, v) in info.Params) { cur.Locals[p] = v; if (v is ScoreVar sv) cur.UsedHolders.Add(sv.Holder); }
         var d = info.Decl;
         bool tagThis = false;
@@ -273,12 +292,19 @@ public sealed partial class Codegen
         }
         try
         {
+            if (d is ConstructorDeclarationSyntax cd)
+            {
+                if (cd.Initializer != null) throw new UnsupportedException(cd.Initializer, "Constructor chaining (: this(...) / : base(...)) is not supported; call a method instead.");
+                InitObj(cur.ThisObj!);
+            }
             if (d.Body != null && ContainsWait(d.Body) && MayAbort(d.Body)) cur.WaitCtl = cur.UsesCtl = true;
             if (d.Body != null) EmitStatements(d.Body.Statements);
             else if (d.ExpressionBody != null)
             {
-                if (Kind(info.Sym.ReturnType) == VK.Void) EmitExprStatement(d.ExpressionBody.Expression);
-                else AssignHolder(new ScoreVar(info.Ret, Kind(info.Sym.ReturnType)), d.ExpressionBody.Expression);
+                var rk = Kind(info.Sym.ReturnType);
+                if (rk == VK.Void || d is ConstructorDeclarationSyntax) EmitExprStatement(d.ExpressionBody.Expression);
+                else if (info.RetVal != null) EmitRefReturn(d.ExpressionBody.Expression);
+                else AssignHolder(new ScoreVar(info.Ret, rk), d.ExpressionBody.Expression);
             }
         }
         catch (UnsupportedException e) { Error(e.Node, e.Message); }
@@ -550,6 +576,23 @@ public sealed partial class Codegen
             case VK.Position:
                 cur.Locals[sym] = new PosVar(init == null ? Pos.Here : EvalPos(init));
                 break;
+            case VK.Obj: DeclareObjLocal(sym, init, at); break;
+            case VK.NStr:
+            {
+                var sv2 = new NStrVar(StoragePathOf(BaseOf(UniqueHolder(sym.Name))));
+                cur.Locals[sym] = sv2;
+                if (init == null) Emit($"data modify storage {Storage} {sv2.Path} set value \"\"");
+                else StrInto(init, sv2.Path);
+                break;
+            }
+            case VK.NArr:
+                if (init == null) break;   // set at the first assignment
+                cur.Locals[sym] = NewArrValue(sym, init);
+                break;
+            case VK.Region or VK.Team:
+                if (init == null) throw new UnsupportedException(at, $"{sym.Name} needs an initial value.");
+                cur.Locals[sym] = EvalCtObj(init);
+                break;
             case VK.Block or VK.Ref or VK.Button or VK.Text or VK.Gui or VK.Item:
                 if (init == null) throw new UnsupportedException(at, $"{sym.Name} needs an initial value.");
                 cur.Locals[sym] = EvalLibObject(init, k, sym);
@@ -557,7 +600,7 @@ public sealed partial class Codegen
                 break;
             default:
                 throw new UnsupportedException(at, sym.Type is IArrayTypeSymbol
-                    ? $"Unsupported array type: {sym.Type}. Arrays hold int, bool, float or double (string arrays only as static readonly tables)."
+                    ? $"Unsupported array type: {sym.Type}. Arrays hold int, bool, Milli or Q16 (string arrays only as static readonly tables; NArray<NString> for runtime strings)."
                     : $"Unsupported variable type: {sym.Type}");
         }
     }
@@ -588,6 +631,7 @@ public sealed partial class Codegen
             Emit($"tag @e[tag={rt}] remove {rt}");
             if (!rs.Expression.IsKind(SyntaxKind.NullLiteralExpression)) Emit($"tag {GetRef(rs.Expression).Selector} add {rt}");
         }
+        else if (rs.Expression != null && cur.Info.RetVal != null) EmitRefReturn(rs.Expression);
         else if (rs.Expression != null)
         {
             var k = Kind(cur.Info.Sym.ReturnType);
@@ -717,6 +761,7 @@ public sealed partial class Codegen
 
     ScoreVar IncDec(ExpressionSyntax target, bool inc)
     {
+        if (IndexIncDec(target, inc) is ScoreVar iv) return iv;
         if (ElemTarget(target) is var (ea, ei))
             return new ScoreVar(((ScoreOp)ElemIncDec(ea, ei, inc, false, target)).Holder, ea.Elem);
         var v = GetVar(target) as ScoreVar ?? throw new UnsupportedException(target, "++/-- only works on numeric variables.");
@@ -728,7 +773,10 @@ public sealed partial class Codegen
     Var? EmitAssignment(AssignmentExpressionSyntax a)
     {
         if (ElemTarget(a.Left) is var (la, li)) return EmitElemAssign(a, la, li);
+        if (EmitIndexAssign(a)) return null;
         var sym = cur.Model.GetSymbolInfo(a.Left).Symbol;
+        if (sym is IPropertySymbol { IsStatic: true } sp && EmitStaticPropSet(sp, a)) return null;
+        if (EmitRefAssign(a, sym)) return null;
         // Entity property
         if (sym is IPropertySymbol prop && a.Left is MemberAccessExpressionSyntax ma && Kind(prop.ContainingType) == VK.Entity)
         {
@@ -755,8 +803,21 @@ public sealed partial class Codegen
                     ApplyOp(sv.Holder, op, EvalNum(a.Right, sv.Kind), sv.Kind);
                 }
                 return sv;
+            case NStrVar nsv:
+                if (a.IsKind(SyntaxKind.AddAssignmentExpression))
+                {
+                    var parts = new List<SPart> { new SPath(nsv.Path) };
+                    StrParts(a.Right, parts);
+                    StrFromParts(parts, nsv.Path, a);
+                }
+                else if (!a.IsKind(SyntaxKind.SimpleAssignmentExpression)) throw new UnsupportedException(a, "Only = and += work on NString.");
+                else StrInto(a.Right, nsv.Path);
+                return null;
+            case TeamVar or RegionVar or ClipVar:
+                if (sym is ILocalSymbol) { SetLocal(sym, EvalCtObj(a.Right)); return null; }
+                throw new UnsupportedException(a, "Static teams / objectives cannot be reassigned.");
             case StrVar:
-                if (!a.IsKind(SyntaxKind.SimpleAssignmentExpression)) throw new UnsupportedException(a, "Runtime string operations are not supported.");
+                if (!a.IsKind(SyntaxKind.SimpleAssignmentExpression)) throw new UnsupportedException(a, "Compile-time strings only support '='. Use NString for runtime strings.");
                 SetLocal(sym!, new StrVar(ConstString(a.Right)));
                 return null;
             case EntVar:
@@ -838,6 +899,7 @@ public sealed partial class Codegen
     /// sign of the dividend. (Scoreboard /= and %= floor instead: -7 / 2 = -4, -7 % 2 = 1.)
     void TruncOp(string h, char op, Operand r)
     {
+        if (McDivision()) { Emit($"scoreboard players operation {h} {op}= {Holder(r)}"); return; }
         if (r is ConstOp c && c.Value != 0 && c.Value != int.MinValue)
         {
             int d = Math.Abs(c.Value);
@@ -933,6 +995,10 @@ public sealed partial class Codegen
         switch (e)
         {
             case ParenthesizedExpressionSyntax p: return EvalNum(p.Expression, kind);
+            case DefaultExpressionSyntax or LiteralExpressionSyntax { RawKind: (int)SyntaxKind.DefaultLiteralExpression }: return new ConstOp(0);
+            case ElementAccessExpressionSyntax iea when IndexerIntrinsic(iea) is string iname: return IndexGet(iname, iea, kind);
+            case MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Zero" or "One" } zm when cur.Model.GetTypeInfo(zm.Expression).Type is ITypeParameterSymbol:
+                return new ConstOp(zm.Name.Identifier.ValueText == "Zero" ? 0 : ScaleOf(kind));
             case IdentifierNameSyntax or MemberAccessExpressionSyntax:
             {
                 var sym = cur.Model.GetSymbolInfo(e).Symbol;
@@ -1068,6 +1134,8 @@ public sealed partial class Codegen
 
     Cond Compare(BinaryExpressionSyntax b)
     {
+        if (cur.Model.GetSymbolInfo(b).Symbol is IMethodSymbol { MethodKind: MethodKind.UserDefinedOperator } uop && Intrinsic(uop) is "nstr.eq" or "nstr.ne")
+            return StrEquals(b.Left, b.Right, Intrinsic(uop) == "nstr.eq");
         if (Kind(cur.Model.GetTypeInfo(b.Left).Type) == VK.String)
         {
             string? l = TryConstString(b.Left), r = TryConstString(b.Right);
@@ -1136,10 +1204,19 @@ public sealed partial class Codegen
     {
         if (ElemTarget(e) is var (ga, gi))
             return gi is ConstOp gc ? new ScoreVar(ElemHolder(ga, gc.Value, e), ga.Elem) : throw new UnsupportedException(e, "A runtime array index cannot be used here.");
-        if (e is ThisExpressionSyntax) return ThisRef(e);
+        if (e is ThisExpressionSyntax) return cur.ThisObj != null ? cur.ThisObj : ThisRef(e);
+        if (e is ElementAccessExpressionSyntax sea && IndexerIntrinsic(sea) == "score.index") return ScoreIndex(sea);
         var sym = cur.Model.GetSymbolInfo(e).Symbol;
         if (sym == null) throw new UnsupportedException(e, $"Unknown symbol: {e}");
         if (cur.Locals.TryGetValue(sym, out var v)) return v;
+        if (ObjField(e, sym) is Var of) return of;
+        if (sym is IFieldSymbol xf)
+        {
+            if (objStatics.TryGetValue(xf, out var ov)) return ov;
+            if (nbtStatics.TryGetValue(xf, out var nv)) return nv;
+            if (mountedStatics.TryGetValue(xf, out var mv)) return mv;
+            if (teamStatics.TryGetValue(xf, out var tv)) return tv;
+        }
         if (sym is IFieldSymbol { IsStatic: false } ef && IsEntityClass(ef.ContainingType))
         {
             var recv = e is MemberAccessExpressionSyntax ma ? GetRef(ma.Expression) : ThisRef(e);
@@ -1162,7 +1239,7 @@ public sealed partial class Codegen
         return ev;
     }
 
-    string Sel(EntVar ev) => $"@e[tag={ev.Tag},limit=1]";
+    string Sel(EntVar ev) => ev.Selector ?? $"@e[tag={ev.Tag},limit=1]";
 
     string? ConstString(ExpressionSyntax e)
     {
@@ -1185,10 +1262,28 @@ public sealed partial class Codegen
         var intr = Intrinsic(sym);
         if (intr != null) return EmitIntrinsic(intr, inv);
         if (HasAttr(sym, "InlineAttribute")) return EmitInline(sym, inv, want, out _);
+        if (externs.TryGetValue(sym.OriginalDefinition, out var ext)) return EmitExternal(ext, sym, inv, want);
 
-        if (!fns.TryGetValue(sym.OriginalDefinition, out var callee))
-            throw new UnsupportedException(inv, $"'{sym.ContainingType?.Name}.{sym.Name}' cannot be used in MC# (not available inside Minecraft).");
+        // an instance method of a plain class: resolve virtual calls from the object's class
+        ObjVar? recvObj = null;
+        if (!sym.IsStatic && IsUserClass(sym.ContainingType))
+        {
+            recvObj = inv.Expression is MemberAccessExpressionSyntax om && om.Expression is not BaseExpressionSyntax ? GetObj(om.Expression)
+                : cur.ThisObj ?? throw new UnsupportedException(inv, "No object here.");
+            if (inv.Expression is not MemberAccessExpressionSyntax { Expression: BaseExpressionSyntax }) sym = Devirtualize(sym, recvObj.Type);
+            if (sym.IsAbstract) throw new UnsupportedException(inv, $"{recvObj.Type.Name} does not implement {sym.Name}.");
+        }
+        var callee = recvObj != null ? GetMethodFor(sym, recvObj.Type, inv) : GetFn(sym, inv);
         var args = inv.ArgumentList.Arguments;
+        if (recvObj != null || callee.Params.Values.Any(p => p is ObjVar or NStrVar or NArrVar) || callee.RetVal != null)
+        {
+            if (IsRecursiveCall(callee.Sym)) throw new UnsupportedException(inv, "Recursive methods cannot take or return objects, NString or NArray yet.");
+            BindArgs(callee, sym, args, inv);
+            if (recvObj != null) EmitObjCall(callee, inv, recvObj); else Emit($"function {callee.Path}");
+            CopyBackArgs(callee, sym, args);
+            if (!want || sym.ReturnsVoid || callee.RetVal != null) return null;
+            return new ScoreOp(ToTemp(new ScoreOp(callee.Ret)));
+        }
         bool rec = IsRecursiveCall(callee.Sym);
         if (rec)
         {
@@ -1293,6 +1388,7 @@ public sealed partial class Codegen
         if (name == "mount") return new ConstOp(1);   // bound at compile time (CollectMounts)
         if (name == "wait")
             throw new UnsupportedException(inv, "Wait() can only be used as a statement directly in a method body or inside if/else, while, for or do-while (not in switch, foreach, lambdas or expressions).");
+        if (TryEmitWorldLib(name, inv, out var wr)) return wr;
         return EmitLibIntrinsic(name, inv);
     }
 
@@ -1324,6 +1420,13 @@ public sealed partial class Codegen
                     else { string n = $"p{refCounter++}"; margs.Add((n, op, VK.Fixed)); coords[i] = $"$({n})"; }
                 }
                 return new Pos("", coords[0], coords[1], coords[2]) { Args = margs.ToArray() };
+            }
+            case "pos.in":
+            {
+                var inv = (InvocationExpressionSyntax)e;
+                var basePos = EvalPos(((MemberAccessExpressionSyntax)inv.Expression).Expression);
+                string dim = DimOf(inv.ArgumentList.Arguments[0].Expression);
+                return basePos with { Prefix = (basePos.Prefix.Length > 0 ? basePos.Prefix + " " : "") + $"in {dim}" };
             }
             case "pos.offset":
             {
@@ -1417,6 +1520,7 @@ public sealed partial class Codegen
 
     Operand EntityGet(EntVar ev, IPropertySymbol p, VK kind, SyntaxNode at)
     {
+        if (Intrinsic(p) == "ex.exists") return StoreT("success", $"if entity {Sel(ev)}");
         CheckSince(p, at);
         var (path, type, attr) = PropInfo(p);
         if (type == "brightness") path += ".block";
@@ -1510,6 +1614,10 @@ public sealed partial class Codegen
             case VK.Bool: return BoolComps(EvalCond(e));
             case VK.Fixed or VK.Double: return FixedComps(EvalNum(e, k), k);
             case VK.Array: return [Text("["), .. ArrayComps(GetArr(e), ", ", e), Text("]")];
+            case VK.Obj: return ObjComps(GetObj(e), e);
+            case VK.NStr: return new() { StorageComp(StrPath(e)) };
+            case VK.NArr: return NArrComps(Unparen(e) is InvocationExpressionSyntax ai ? NArrResult(ai) : GetNArr(e));
+            case VK.Team: return new() { Text(((TeamVar)EvalCtObj(e)).Name) };
         }
         throw new UnsupportedException(e, "This value cannot be printed.");
     }
@@ -1569,6 +1677,7 @@ public sealed partial class Codegen
     public static VK Kind(ITypeSymbol? t)
     {
         if (t == null) return VK.Unsupported;
+        if (t is ITypeParameterSymbol tp) return subst != null && subst.TryGetValue(tp, out var ct) ? Kind(ct) : VK.Unsupported;
         if (t is IArrayTypeSymbol { Rank: 1 } arr && Kind(arr.ElementType) is VK.Int or VK.Bool or VK.Fixed or VK.Double) return VK.Array;
         switch (t.SpecialType)
         {
@@ -1588,18 +1697,24 @@ public sealed partial class Codegen
         if (t.Name == "Text" && nsName == "TuiLib") return VK.Text;
         if (t.Name is "Board" or "BossBar" && nsName == "GuiLib") return VK.Gui;
         if (t.Name == "Item" && nsName == "ItemLib") return VK.Item;
+        if (t.Name == "NString" && nsName == "MCS") return VK.NStr;
+        if (t.Name == "NArray" && nsName == "MCS") return VK.NArr;
+        if (t.Name is "Region" or "Clipboard" && nsName == "BlockLib") return VK.Region;
+        if (t.Name is "Team" or "Objective" && nsName == "TeamLib") return VK.Team;
         for (var bt = t as INamedTypeSymbol; bt != null; bt = bt.BaseType)
         {
             if (bt.Name == "Block" && bt.ContainingNamespace?.ToDisplayString() == "BlockLib") return VK.Block;
             if (bt.Name == "EntityObject" && bt.ContainingNamespace?.ToDisplayString() == "MCS") return VK.Ref;
         }
+        if (IsUserClass(t)) return VK.Obj;
         return VK.Unsupported;
     }
 
     string MethodPrefix(IMethodSymbol m)
     {
-        string name = Snake(m.Name);
-        return m.ContainingType.Name == Preprocessor.GlobalClass ? name : Snake(m.ContainingType.Name) + "." + name;
+        string name = m.MethodKind == MethodKind.Constructor ? "ctor" : Snake(m.Name);
+        if (m.IsGenericMethod) name += string.Concat(m.TypeArguments.Select(a => "_" + TypeKey(a)));
+        return m.ContainingType.Name == Preprocessor.GlobalClass ? name : TypeKey(m.ContainingType) + "." + name;
     }
 
     public static string Snake(string s)

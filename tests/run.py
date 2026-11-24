@@ -20,6 +20,8 @@ Directives (comment lines anywhere in a case):
   // @mc 1.20.2-26.3        version range to build (default: the compiler's default range)
   // @ticks 100             ticks to simulate (default: until nothing is scheduled; 20 with #tick functions)
   // @do 5 die Steve        scripted player action at a tick (see tools/mcsim.py); repeatable
+  // @warning <text>        the build must print a warning containing <text>; repeatable
+  // @real load             on real servers, only check that the pack loads (for world state the simulator lacks)
 """
 import concurrent.futures
 import difflib
@@ -69,6 +71,9 @@ def run_case(path, tmp):
     ok, log = compile_mcs(path, out_dir, d.get('mc'))
     if not ok:
         return 'compile error:\n' + log
+    missing = [w for w in re.findall(r'^\s*//\s*@warning\s+(.*?)\s*$', text, re.M) if w not in log]
+    if missing:
+        return 'missing warnings:\n  ' + '\n  '.join(missing) + '\ncompiler output:\n' + log
     ticks = int(d['ticks']) if 'ticks' in d else None
     per_format = {}
     for fmt in mcsim.Pack(out_dir).formats:
@@ -136,7 +141,7 @@ def run_real_version(version, fmt, packs, log):
                 failures.append(f'{version} {name}: {e}')
                 break
             msgs = list(found)
-            comparable = (sim is not None and not actions(text)
+            comparable = (sim is not None and not actions(text) and (text is None or not re.search(r'^\s*//\s*@real\s+load\b', text, re.M))
                           and (mcreal.has_tick_command(version) or not sim.pack.tag('minecraft:tick')))
             if comparable:
                 want = real_scores(sim)

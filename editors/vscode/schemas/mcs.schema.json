@@ -31,6 +31,15 @@
     "description": {
       "type": "string",
       "description": "pack.mcmeta description"
+    },
+    "division": {
+      "type": "string",
+      "enum": [
+        "csharp",
+        "minecraft"
+      ],
+      "default": "csharp",
+      "description": "How / and % round: csharp (toward zero, like C#) or minecraft (one scoreboard operation, toward −∞ — faster)"
     }
   },
   "required": [

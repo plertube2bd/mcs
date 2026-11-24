@@ -59,9 +59,121 @@ var me = Entities.Self<Nation>();                                    // @s
 - **Nesting:** loop variables, `this` and parameters stay valid in nested loops and lambdas. The compiler tags the entity when it needs to.
 - **Query results:** `Nearest`, `Random`, `First` and `Spawn` capture their result with a tag, so it stays valid after the context changes.
 
+## Number types: Milli and Q16
+
+MC# numbers are scores, so fractions are fixed point. The MC# names say exactly what you get:
+
+| Type | Stored as | Precision | Range |
+|---|---|---|---|
+| `int` | score | 1 | ±2147483647 |
+| `Milli` | score ×1000 | 0.001 | ±2147483.647 |
+| `Q16` | score ×65536 (Q15.16) | 1/65536 ≈ 0.0000153 | ±32768 |
+
+```csharp
+Milli speed = 1.25f;      // literals keep C#'s f suffix
+Q16 angle = 0.5;
+Milli back = (Milli)(angle * 2);
+```
+
+`float` and `double` are the same two types under their old names. They still compile, but every use prints a warning, and they may be removed in any future version:
+
+```
+hello.mcs(3,8): warning MCS: 'float' is deprecated: use Milli. 'float' still works for now, but may be removed in any future version.
+```
+
+## Classes
+
+Plain classes (and structs) work like in C#: fields, auto-properties, constructors, methods, `this`, inheritance, `virtual` / `abstract` / `override`, and a `ToString()` override for printing.
+
+```csharp
+class Vec {
+    public int X, Y;
+    public Vec(int x, int y) { X = x; Y = y; }
+    public int Len2() => X * X + Y * Y;
+    public void Add(Vec o) { X += o.X; Y += o.Y; }
+    public override string ToString() => $"({X}, {Y})";
+}
+
+static Vec origin = new Vec(0, 0);         // static objects are built once, on the first load
+
+public static void Main() {
+    var a = new Vec(3, 4);
+    Vec b = a;                              // the same object
+    b.X = 10;
+    a.Add(new Vec(1, 1));
+    m.Console.WriteLine($"{a} {a.Len2()}");  // (11, 5) 146
+}
+```
+
+How it compiles:
+
+- **Fields are scores.** An object's fields are flattened into scores (`$main.a.X`), so reading or writing a field is one scoreboard command — no NBT, no macros, every version. NString / NArray fields live in storage.
+- **Methods are functions** with a `this` frame: calling `a.Add(o)` copies `a` into the frame, runs `<ns>:vec/add`, and copies it back (only if the method can change the object). Each constructor is a function too.
+- **References are fixed at compile time.** `Vec b = a;` makes `b` the same object, and passing an object to a method lets the method change it. A variable cannot point at a different object depending on a condition (`if (c) b = other;` is an error — assign the fields instead). There is no `null`.
+- **Objects in fields are embedded.** `class Rect { public Vec Min; }` stores the `Vec`'s fields inside the `Rect`; assigning `r.Min = v` copies `v`'s fields. A class therefore cannot contain its own type (no linked lists).
+- **Virtual calls are resolved at compile time** from the object's actual class. A method inherited from a base class gets one copy per class, so its calls reach that class's overrides.
+- `ToString()` must be a single expression (`=> $"…"`); it is evaluated where the object is printed. Without it, objects print as `Vec(X: 3, Y: 4)`.
+- Not supported: constructor chaining (`: this(…)` / `: base(…)`), `null`, computed properties (use methods), recursive methods that take or return objects.
+
+## Generics
+
+Generic methods and generic classes are compiled once for each set of type arguments (`Max<int>` → `<ns>:max_int`, `Box<Milli>` → `<ns>:box_milli/…`). Use the .NET generic-math interfaces for operators:
+
+```csharp
+using System.Numerics;
+
+static T Max<T>(T a, T b) where T : INumber<T> => a > b ? a : b;
+
+class Box<T> where T : INumber<T> {
+    public T Value;
+    public Box(T v) { Value = v; }
+    public T Twice() => Value + Value;
+}
+
+m.Console.WriteLine($"{Max(3, 9)} {Max(1.5f, -2f)} {new Box<Q16>(0.25).Twice()}");   // 9 1.500 0.50000
+```
+
+- `T.Zero`, `T.One` and `default` work. Type arguments can be `int`, `bool`, `Milli`, `Q16`, classes, `NString` and `NArray<…>`.
+- Recursive generic methods are not supported.
+
+## Runtime strings and arrays: NString, NArray<T>
+
+`string` is a compile-time constant. For text that changes at run time, use **`NString`**; for arrays whose length changes at run time, use **`NArray<T>`** (`T`: `int`, `bool`, `Milli`, `Q16`, `NString`). Both live in NBT storage (`<ns>:mcs`).
+
+```csharp
+NString name = "Steve";
+int hp = 17;
+NString line = $"{name} has {hp} HP";      // joined at run time
+line += "!";
+if (line.StartsWith("Steve")) m.Console.WriteLine(line);
+
+var scores = new NArray<int> { 4, 9 };
+scores.Add(hp);
+scores[0] += 1;
+int best = 0;
+foreach (int s in scores) if (s > best) best = s;
+m.Console.WriteLine($"{scores} best={best} n={scores.Length}");   // [5, 9, 17] best=17 n=3
+```
+
+| NString | | NArray<T> | |
+|---|---|---|---|
+| `"text"`, `$"… {x} …"`, `a + b`, `+=` | ① | `new NArray<T>()`, `new NArray<T>(n)`, `{ 1, 2 }` | |
+| `==`, `!=` | | `a[i]`, `a[i] = v`, `a[i] += v` | ② |
+| `Length`, `IsEmpty` | | `Length` / `Count` | |
+| `Substring(start[, length])`, `s[i]` | ② | `Add(v)`, `Insert(i, v)` ②, `RemoveAt(i)` ②, `Pop()`, `Clear()` | |
+| `StartsWith`, `EndsWith` | | `foreach` | |
+| `IndexOf`, `Contains`, `ToInt()` | ① | printing: `{a}` → `[1, 2, 3]` | |
+
+① needs function macros (1.20.2+). ② needs 1.20.2+ only when the index is a runtime value (constant indexes work everywhere).
+
+- `NString` is a value: assigning copies the text. `NArray` is a reference like objects (`b = a` is the same array; passing it to a method lets the method change it).
+- Joining strings goes through a macro, so a string that contains `"` or `\` cannot be joined.
+- Out-of-range reads give 0 / leave the result unchanged; Minecraft cannot throw.
+- `NArray<Milli>` stores the raw ×1000 integers (exact), so printing an `NArray<Milli>` shows those integers.
+
 ## Arrays
 
-`int[]`, `bool[]`, `float[]` and `double[]` are writable arrays, as static fields or local variables. The length is fixed at compile time.
+`int[]`, `bool[]`, `Milli[]` and `Q16[]` are writable arrays, as static fields or local variables. The length is fixed at compile time.
 
 ```csharp
 static int[] grid = new int[20];          // zeros
@@ -138,8 +250,19 @@ m.Console.WriteLine($"{Math.FloorDiv(a, 2)} {Math.FloorMod(a, 2)}"); // -4 1  (u
 
 - Scoreboard `/=` and `%=` round toward negative infinity, so the compiler adds sign handling: dividing by a constant takes 4 commands, a runtime divisor calls a shared helper (`<ns>:__math/idiv` / `irem`).
 - `Math.FloorDiv` / `Math.FloorMod` (MathLib) are the raw single-command floor versions — use them in hot code when the values are known to be non-negative, or when you want floor semantics.
-- `float` / `double` division also rounds toward zero (to the last fixed-point digit), and `%` works the same way. `(int)x` on a `float`/`double` truncates toward zero, like C#.
+- `Milli` / `Q16` division also rounds toward zero (to the last fixed-point digit), and `%` works the same way. `(int)x` on a `Milli`/`Q16` truncates toward zero, like C#.
 - Division by zero cannot throw: the value is left unchanged.
+
+### Minecraft division (faster)
+
+C# division needs extra commands for the sign. If floor semantics are fine, let `/` and `%` compile to Minecraft's own single scoreboard operation — they then round toward −∞ and `%` takes the divisor's sign (`-7 / 2 = -4`, `-7 % 2 = 1`):
+
+```csharp
+[MinecraftDivision] static int Cell(int x) => x / 16;      // one method (or a whole class)
+[CSharpDivision] static int Exact(int x) => x / 16;        // opt out again
+```
+
+For the whole project, set `"division": "minecraft"` in `mcs.json` (or `--division minecraft`). `Q16 / Q16` keeps its exact helper either way.
 
 ## Recursion
 
@@ -261,6 +384,28 @@ use PlayerLib;
 ## Chat buttons that run a command
 
 `new Button("[Build]", "trigger war.act set 3")` creates a button that runs the given command. `new Button(label, Method)` creates one that calls an MC# method.
+
+## Calling other datapacks
+
+MC# output never needs another pack — but you can choose to call one. Then your pack depends on it (your choice, not the compiler's).
+
+```csharp
+[External("other:api/ping")] static extern void Ping();                 // function other:api/ping
+[External("other:api/add")] static extern int Add(int a, int b);        // function other:api/add {a:…, b:…}
+[External("#other:hooks")] static extern void Hooks();                  // a function tag
+
+[McsPack("lib")]                       // a pack compiled with MC# (namespace lib)
+static class Lib {
+    public static extern int Square(int x);   // sets $square.x mcs.lib, runs lib:square, reads $square#ret mcs.lib
+}
+
+int s = Add(2, 3) + Lib.Square(4);
+m.Call("other:setup");                 // any function or #tag, by name
+```
+
+- `[External]` parameters become macro arguments (`$(a)`, 1.20.2+): `int`, `bool`, `Milli`, `Q16`, `string`, `NString`. An `int` / `bool` result is the function's `/return` value.
+- `[McsPack("ns", "Class")]` calls methods declared in class `Class` of the other pack (`ns:class/method`). Its parameters and results use that pack's scores, so they must be `int`, `bool`, `Milli` or `Q16`.
+- The other pack must be loaded first (its objectives exist only after its own load function ran).
 
 ## Resources
 

@@ -34,6 +34,10 @@ public sealed record TargetProfile(McVersion First, McVersion Last)
     public bool NewBlockStateNbt => Format >= 121;
     /// /compute (number-provider expressions in one command) — 26.3+
     public bool Compute => Format >= 121;
+    /// worldborder set: duration in whole seconds (≤1.21.10) → a time argument ("30s", 1.21.11+)
+    public bool WorldBorderTime => Format >= 94;
+    /// World clocks (26.1+): time of day = "time query day" (the day timeline), days = "time query time" / 24000
+    public bool Timelines => Format >= 101;
     /// Scoreboard display slot: belowName (≤1.20.1) → below_name (1.20.2+)
     public string BelowNameSlot => Format >= 18 ? "below_name" : "belowName";
 

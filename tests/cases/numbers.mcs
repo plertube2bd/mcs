@@ -1,27 +1,27 @@
 // float is ×1000 fixed point, double is Q15.16 (×65536).
-static double sx = 1.25;
-static double v = -2.75;
+static Q16 sx = 1.25;
+static Q16 v = -2.75;
 
 public static void Main() {
-    double a = sx;
-    double b = a * a;
-    double c = b / 3;
-    double d = a / b;
-    float f = 2.5f;
-    double mixed = f * a;
-    float back = (float)(a * 2);
+    Q16 a = sx;
+    Q16 b = a * a;
+    Q16 c = b / 3;
+    Q16 d = a / b;
+    Milli f = 2.5f;
+    Q16 mixed = f * a;
+    Milli back = (Milli)(a * 2);
     int whole = (int)(b * 10);
     m.Console.WriteLine($"b={b} c={c} d={d} mixed={mixed} back={back} whole={whole}");
 
-    double x = v;
+    Q16 x = v;
     x++;
-    double p = x * -3.5;
-    double q = -7 / x;
+    Q16 p = x * -3.5;
+    Q16 q = -7 / x;
     int three = 3;
-    double r = three * 0.1;
+    Q16 r = three * 0.1;
     m.Console.WriteLine($"x={x} p={p} q={q} r={r} big={p > 6.1249}");
 
-    double big = 30000;
-    double sat = big / 0.001;               // does not fit: saturates
+    Q16 big = 30000;
+    Q16 sat = big / 0.001;               // does not fit: saturates
     m.Console.WriteLine($"sat={sat} small={1 / big}");
 }

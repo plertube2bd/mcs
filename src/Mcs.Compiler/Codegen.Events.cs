@@ -57,7 +57,7 @@ public sealed partial class Codegen
 
     void AddEvent(FnInfo info, string kind, string? arg)
     {
-        SyntaxNode at = info.Decl.Identifier.Parent!;
+        SyntaxNode at = ((MethodDeclarationSyntax)info.Decl).Identifier.Parent!;
         if (!info.Sym.IsStatic || !info.Sym.ReturnsVoid)
             throw new UnsupportedException(info.Decl, $"[{kind}] methods must be static and return void.");
         bool hasInt = false;

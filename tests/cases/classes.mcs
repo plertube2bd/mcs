@@ -1,0 +1,65 @@
+// Plain classes: fields, constructors, methods, references, embedded objects, inheritance, ToString, statics.
+class Vec {
+    public int X, Y;
+    public Vec(int x, int y) { X = x; Y = y; }
+    public int Len2() => X * X + Y * Y;
+    public void Add(Vec o) { X += o.X; Y += o.Y; }
+    public void Scale(int k) { X *= k; Y *= k; }
+    public override string ToString() => $"({X}, {Y})";
+}
+
+class Counter {
+    public int Count;
+    public Milli Step = 0.5f;
+    public void Tick() { Count++; }
+}
+
+class Rect {
+    public Vec Min = new Vec(0, 0);
+    public Vec Max = new Vec(1, 1);
+    public int Area() => (Max.X - Min.X) * (Max.Y - Min.Y);
+}
+
+abstract class Shape {
+    public int Id;
+    public abstract int Sides();
+    public virtual int Weight() => Sides() * 10;
+}
+class Tri : Shape { public override int Sides() => 3; }
+class Sq : Shape { public override int Sides() => 4; public override int Weight() => 99; }
+
+static Counter global = new Counter();
+
+static Vec Make(int a) => new Vec(a, a + 1);
+static void Grow(Vec v) { v.X += 100; }
+
+public static void Main() {
+    Vec a = new Vec(3, 4);
+    m.Console.WriteLine($"a={a} len2={a.Len2()}");
+    Vec b = a;            // the same object
+    b.X = 10;
+    m.Console.WriteLine($"a.X={a.X}");
+    a.Add(new Vec(1, 1));
+    a.Scale(2);
+    m.Console.WriteLine($"a={a}");
+    Grow(a);
+    m.Console.WriteLine($"grown={a.X}");
+    var c = Make(7);
+    c.Y -= 1;
+    m.Console.WriteLine($"c={c} make={Make(1).Y}");
+
+    var r = new Rect();
+    r.Max.X = 5; r.Max.Y = 3;
+    r.Min = new Vec(1, 1);
+    m.Console.WriteLine($"area={r.Area()}");
+
+    Shape t = new Tri();
+    Shape s = new Sq { Id = 7 };
+    m.Console.WriteLine($"tri={t.Sides()},{t.Weight()} sq={s.Sides()},{s.Weight()} id={s.Id}");
+
+    for (int i = 0; i < 3; i++) global.Tick();
+    m.Console.WriteLine($"count={global.Count} step={global.Step}");
+    var k = new Counter { Count = 40 };
+    k.Tick();
+    m.Console.WriteLine(k);
+}

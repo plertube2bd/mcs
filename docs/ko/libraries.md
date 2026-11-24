@@ -1,18 +1,23 @@
 # MC# 라이브러리 레퍼런스
 
-MC#에는 내장 라이브러리가 다섯 개 있습니다. 모두 데이터팩 안에 함께 컴파일되므로, 출력된 팩은 다른 데이터팩이나 모드에 의존하지 않습니다.
+MC#에는 여러 내장 라이브러리가 있습니다. 모두 데이터팩 안에 함께 컴파일되므로, 출력된 팩은 다른 데이터팩이나 모드에 의존하지 않습니다.
 
 | 라이브러리 | 불러오는 방법 | 내용 |
 |---|---|---|
-| **Core** | 항상 사용 가능 | `asm`, `m.Console`, `Position`, `GetWorldSpawn`, `SetWorldSpawn`, `SpawnEntity`, `m.SetBlock`/`FillBlock`/`IsBlock`, `[Load]`, `[Tick]` |
-| **EntityLib** | `use EntityLib;` | `Entity`, `EntityType`, `m.SpawnEntityObject` |
+| **Core** | 항상 사용 가능 | `asm`, `m.Console`, `Position`, `GetWorldSpawn`, `SetWorldSpawn`, `SpawnEntity`, `m.SetBlock`/`FillBlock`/`IsBlock`, `[Load]`, `[Tick]`, `m.Mount`/`MountEntity`/`MountBlock`, `m.Call`, `NString`, `NArray<T>` |
+| **EntityLib** | `use EntityLib;` | `Entity`, `EntityType`, `m.SpawnEntityObject`, 상호작용(`Damage`, `Ride`, `LookAt`, …), `Interaction` |
 | **DisplayLib** | `use DisplayLib;` | `BlockDisplay`, `ItemDisplay`, `TextDisplay` (디스플레이 엔티티: 크기, 회전, 애니메이션, 실행 중 텍스트) |
-| **BlockLib** | `use BlockLib;` | `Block`과 블록마다 하나씩 있는 클래스(`OakStairs`, `Stone`, …), `m.SetBlockObject`/`FillBlockObject`/`IsBlockObject` |
+| **BlockLib** | `use BlockLib;` | `Block`과 블록마다 하나씩 있는 클래스(`OakStairs`, `Stone`, …), `m.SetBlockObject`/`FillBlockObject`/`IsBlockObject`, `Region`(`Clone`/`Move`/`Stack`/`Copy`/`Cut`/`Paste`) |
 | **PlayerLib** | `use PlayerLib;` | `Player` (제어, 인벤토리 칸, 효과 등), `Slot`, `GameMode` |
 | **TuiLib** | `use TuiLib;` | 클릭할 수 있는 채팅 `Button`, 스타일 `Text`, `Tui.Menu`/`Print`/`Title` |
 | **MathLib** | `use MathLib;` | `Math.Sin`/`Cos`/`Tan`, `Math.FloorDiv`/`FloorMod`, `Math.PI`/`Tau`/`Deg2Rad`/`Rad2Deg` |
 | **ItemLib** | `use ItemLib;` | 아이템 오브젝트(`new Item(id) { Name = … }`), `m.GiveObject`, `[OnRightClickObject]` |
 | **GuiLib** | `use GuiLib;` | `Gui.SetDisplay`/`ClearDisplay`, `Board`(사이드바 / 탭 목록 / 이름 아래), `BossBar` |
+| **WorldLib** | `use WorldLib;` | `World.Time()`/`SetTime`, `World.Weather`, `Difficulty`, `GameRule`, 월드 보더, `Dimension`, `World.Run(차원, …)` |
+| **ParticleLib** | `use ParticleLib;` | `Particle.Spawn`, `Dust`, `Line`, `Circle` |
+| **SoundLib** | `use SoundLib;` | `Sound.Play`, `PlayTo`, `Stop` |
+| **NbtLib** | `use NbtLib;` | `Storage.Get`/`Set`/`Has`/`Remove`/…, 엔티티·블록 엔티티용 `Nbt.Get`/`Set`/`Merge` |
+| **TeamLib** | `use TeamLib;` | `Team`(색, 접두사, 팀원), `Objective`(`kills[player] += 1`) |
 
 ### ID는 버전별로 검사됩니다
 
@@ -59,8 +64,8 @@ m.Console.WriteLine($"UUID: {string.Join("", x.uuid)}");
 |---|---|
 | 상수 | 컴파일할 때 계산해서 텍스트로 표시 |
 | `int` | 스코어 값 |
-| `float` | `-12.345` (소수점 3자리) |
-| `double` | `-12.34567` (소수점 5자리) |
+| `Milli` | `-12.345` (소수점 3자리) |
+| `Q16` | `-12.34567` (소수점 5자리) |
 | `bool` | `True` / `False` |
 | `Entity`, `Player` | 이름 (셀렉터) |
 | `Button`, `Text` | 클릭 가능한 버튼 / 스타일 텍스트 |
@@ -160,6 +165,37 @@ public static void Main()
 - **초깃값:** 연결된 필드는 초기화되지 않습니다. `static int x = 5;`는 점수가 아직 없을 때만 설정합니다.
 - `static int` / `bool` 필드만 가능합니다 (스코어는 정수).
 
+### `m.MountEntity` / `m.MountBlock` — 변수를 기존 엔티티·블록에 연결
+
+스코어용 `m.Mount`처럼, 변수를 월드에 이미 있는 것에 연결합니다(컴파일 타임, 명령어 없음):
+
+```csharp
+use EntityLib;
+use BlockLib;
+
+static Entity boss;
+m.MountEntity(boss, "boss");                           // "boss" 태그가 붙은 엔티티
+static OakDoor door;
+m.MountBlock(door, new Position(5, 64, 5));            // 5 64 5에 있는 참나무 문
+
+public static void Main() {
+    boss.Glowing = true;                               // data modify entity @e[tag=boss,limit=1] Glowing …
+    door.Open = !door.Open;                            // 월드를 읽고, open만 바꿈
+    if (door.Facing == Facing.North) { … }
+}
+```
+
+- **엔티티 대상:** 태그(`"boss"`), 선택자(`"@e[type=minecraft:zombie,limit=1]"`), UUID. 변수는 `Entity`나 엔티티 클래스 / `Player` 참조일 수 있습니다. 지역 변수도 연결할 수 있습니다(`Entity e; m.MountEntity(e, "x");`).
+- **블록:** 변수는 타입이 정해진 블록 클래스여야 합니다(`Block`이 아니라 `OakDoor`). 상태를 읽으면 월드를 확인합니다(`execute if block …`, 가능한 값마다 명령어 하나). 상태를 쓰면 다른 상태를 먼저 읽고, 그 상태만 바꿔서 블록을 다시 놓습니다(1.20.2+; 1.20.1에서는 다른 상태가 기본값이 됩니다). `setblock`은 블록 엔티티 데이터(예: 상자 내용물)를 지웁니다.
+
+### `m.Call(string function)`
+
+아무 함수나 `#태그`를 이름으로 실행하고 결과를 돌려줍니다. 타입이 있는 선언은 [다른 데이터팩 호출](language.md#다른-데이터팩-호출)을 보세요.
+
+### 런타임 문자열과 배열
+
+`NString`과 `NArray<T>`는 항상 쓸 수 있습니다 — [언어 가이드](language.md#런타임-문자열과-배열-nstring-narrayt)를 보세요.
+
 ---
 
 ## EntityLib
@@ -179,11 +215,11 @@ if (!m.SpawnEntityObject(x, GetWorldSpawn())) return;
 
 | 속성 | 타입 | 읽기 | 쓰기 | 마인크래프트 대응 |
 |---|---|:-:|:-:|---|
-| `Health` | `float` | ✅ | ✅ | NBT `Health` |
-| `maxHealth` / `MaxHealth` | `float` | ✅ | ✅ ¹ | 속성 `max_health` |
-| `MovementSpeed` | `float` | ✅ | ✅ ¹ | 속성 `movement_speed` |
-| `AttackDamage` | `float` | ✅ | ✅ ¹ | 속성 `attack_damage` |
-| `Armor` | `float` | ✅ | ✅ ¹ | 속성 `armor` |
+| `Health` | `Milli` | ✅ | ✅ | NBT `Health` |
+| `maxHealth` / `MaxHealth` | `Milli` | ✅ | ✅ ¹ | 속성 `max_health` |
+| `MovementSpeed` | `Milli` | ✅ | ✅ ¹ | 속성 `movement_speed` |
+| `AttackDamage` | `Milli` | ✅ | ✅ ¹ | 속성 `attack_damage` |
+| `Armor` | `Milli` | ✅ | ✅ ¹ | 속성 `armor` |
 | `Fire`, `Air` | `int` | ✅ | ✅ | NBT |
 | `NoAI`, `Silent`, `Glowing`, `Invulnerable`, `NoGravity`, `PersistenceRequired` | `bool` | ✅ | ✅ | NBT |
 | `uuid` / `UUID` | `int[]` | 출력만 | ❌ | NBT `UUID` |
@@ -193,6 +229,37 @@ if (!m.SpawnEntityObject(x, GetWorldSpawn())) return;
 - **¹ 속성(attribute):** 상수는 모든 버전에서 됩니다. 실행 중의 값은 함수 매크로가 필요해서 1.20.2 이상에서만 됩니다 (`#if MC_1_20_2_OR_GREATER`).
 
 메서드는 `Kill()`, `Teleport(Position pos)`가 있습니다. 엔티티를 메서드에 넘길 수도 있습니다 (`void Buff(Entity e)`).
+
+### 상호작용
+
+아래 메서드는 `Entity` 오브젝트와 엔티티 클래스 / `Player` 참조(`EntityObject`) 모두에서 쓸 수 있습니다. `other` / `target` / `vehicle` / `attacker` 인자에는 둘 중 아무거나 넘길 수 있습니다.
+
+| 메서드 | 명령어 |
+|---|---|
+| `Damage(Milli amount, string type = "generic", object attacker = null)` | `damage <e> <amount> <type> [by <attacker>]` (실행 중 값: 1.20.2+) |
+| `Ride(object vehicle)` / `Dismount()` | `ride <e> mount <vehicle>` / `ride <e> dismount` |
+| `TeleportTo(object target)` | `tp <e> <target>` |
+| `LookAt(Position pos)` / `LookAt(object target)` | 위치나 다른 엔티티의 눈을 바라봄 |
+| `SetMotion(x, y, z)` | `Motion` 설정 (실행 중 값 가능) |
+| `IsNear(object other, Q16 distance)` | `other`가 `distance` 블록 안에 있는가? |
+| `IsIn(Dimension d)` | 이 차원에 있는가? (WorldLib) |
+| `Effect(id, seconds, amplifier = 0, hide = false)`, `ClearEffects()` | `effect give` / `effect clear` (Entity) |
+| `AddTag`, `RemoveTag`, `HasTag` | 태그 (Entity; 엔티티 클래스에는 원래 있음) |
+| `Exists` | 엔티티가 아직 있는가? |
+
+### `Interaction`
+
+상호작용 엔티티는 클릭을 기억하는 보이지 않는 히트박스입니다(1.19.4+):
+
+```csharp
+var box = new Interaction { Width = 2f, Height = 1f, Response = true };
+m.SpawnEntityObject(box, pos);
+...
+if (box.Clicked()) box.Clicker.SendMessage("Hi!");    // 마지막 확인 이후 우클릭 (확인하면 지워짐)
+if (box.Attacked()) box.Attacker.SendMessage("Ouch"); // 좌클릭
+```
+
+`Clicker` / `Attacker`는 `Player` 참조입니다(`execute on target` / `on attacker`).
 
 ---
 
@@ -226,12 +293,12 @@ var gem = new ItemDisplay("diamond") { Mode = ItemDisplayMode.Ground };
 | 속성 | 타입 | NBT | |
 |---|---|---|---|
 | `Billboard` | `Billboard` (`Fixed`, `Vertical`, `Horizontal`, `Center`) | `billboard` | 플레이어 쪽으로 회전 |
-| `Scale` / `ScaleX`, `ScaleY`, `ScaleZ` | `float` | `transformation.scale` | 균일 / 축별 |
-| `OffsetX`, `OffsetY`, `OffsetZ` | `float` | `transformation.translation` | 모델 위치 이동 (블록 단위) |
-| `RotationY`, `RotationX` | `float` (도, 쓰기 전용) | `transformation.left_rotation` / `right_rotation` | Y축(위에서 볼 때 반시계), 그다음 X축 회전 |
+| `Scale` / `ScaleX`, `ScaleY`, `ScaleZ` | `Milli` | `transformation.scale` | 균일 / 축별 |
+| `OffsetX`, `OffsetY`, `OffsetZ` | `Milli` | `transformation.translation` | 모델 위치 이동 (블록 단위) |
+| `RotationY`, `RotationX` | `Milli` (도, 쓰기 전용) | `transformation.left_rotation` / `right_rotation` | Y축(위에서 볼 때 반시계), 그다음 X축 회전 |
 | `Brightness` | `int` 0–15 | `brightness` | 고정 밝기 (블록·하늘 빛) |
 | `GlowColor` | `int` (RGB) | `glow_color_override` | `Glowing = true`일 때 테두리 색 |
-| `ViewRange`, `ShadowRadius`, `ShadowStrength`, `Width`, `Height` | `float` | 같은 이름 | |
+| `ViewRange`, `ShadowRadius`, `ShadowStrength`, `Width`, `Height` | `Milli` | 같은 이름 | |
 | `InterpolationDuration`, `InterpolationDelay` | `int` 틱 | `interpolation_duration`, `start_interpolation` | |
 | `TeleportDuration` | `int` 틱 | `teleport_duration` | 부드러운 순간이동 (1.20.2+) |
 
@@ -280,6 +347,27 @@ if (m.IsBlockObject(stairs, origin)) { ... }
 - **컴파일 타임 값:** 블록 객체는 명령어 안에 그대로 컴파일되므로, 상태는 상수여야 합니다.
 - **버전 검사:** 일부 대상 버전에만 있는 블록(예: `PaleOakLog`, 1.21.4+)은 해당 버전을 표시한 오류를 냅니다. `#if`를 쓰세요.
 
+### 영역: `Region`과 `Clipboard`
+
+```csharp
+var r = new Region(new Position(0, 64, 0), new Position(3, 66, 1));
+r.Fill("minecraft:stone");
+r.Replace("minecraft:stone", "minecraft:dirt");
+r.Clone(new Position(10, 64, 0));            // 복사 (masked: true면 공기는 건너뜀)
+r.Move(new Position(40, 64, 0));             // 이동, 원래 영역은 공기가 됨
+r.Stack(Direction.Up, 3);                    // 위로 3개 쌓기 (간격 = 영역 크기)
+r.Stack(0, 0, 5, 2);                         // z 방향으로 5블록 간격, 2개
+Clipboard snap = r.Copy(new Position(100, 0, 100));   // 비어 있는 버퍼 영역에 지금 상태를 저장
+Clipboard cut = r.Cut(new Position(100, 0, 100));     // 버퍼로 옮기기 (잘라내기)
+snap.Paste(new Position(30, 64, 0));
+bool same = r.Matches(new Position(10, 64, 0));        // execute if blocks
+```
+
+- 모서리와 목적지는 같은 위치 기준(`p`, `p.Offset(…)`)이거나 절대 좌표여야 하고, 좌표는 상수여야 합니다. 모든 메서드는 성공 여부를 돌려줍니다.
+- 버퍼 없는 `r.Copy()`는 **붙여 넣는 시점의** 영역을 붙여 넣습니다. 버퍼를 주면 복사한 시점의 블록을 붙여 넣습니다. 마인크래프트에는 월드 말고는 블록을 기억할 곳이 없으므로, 스냅샷에는 (로드된 청크 안의) 빈 영역이 필요합니다.
+- `Stack(Direction, n)`과 버퍼는 컴파일 타임에 영역 크기를 알아야 합니다: 두 모서리가 모두 상대(`~`) 좌표이거나 모두 절대 좌표.
+- 마인크래프트는 `clone` / `fill` 한 번에 32768블록까지만 허용합니다.
+
 ---
 
 ## PlayerLib
@@ -307,7 +395,7 @@ use PlayerLib;
 |---|---|:-:|:-:|
 | `Count` | `int` | ✅ | |
 | `Exists` | `bool` | ✅ | |
-| `Health` | `float` | ✅ | |
+| `Health` | `Milli` | ✅ | |
 | `Food` | `int` | ✅ | |
 | `Level` | `int` | ✅ | ✅ |
 | `SelectedSlot` | `int` | ✅ | |
@@ -403,24 +491,24 @@ public static void OnNo() {
 ```csharp
 use MathLib;
 
-double a = 30 * Math.Deg2Rad;
-double s = Math.Sin(a);          // 0.5
-float  c = Math.Cos(1.0f);       // float 오버로드 → float 결과
+Q16 a = 30 * Math.Deg2Rad;
+Q16 s = Math.Sin(a);          // 0.5
+Milli  c = Math.Cos(1.0f);       // Milli 오버로드 → Milli 결과
 ```
 
 | 멤버 | 설명 |
 |---|---|
-| `Math.Sin(x)`, `Math.Cos(x)`, `Math.Tan(x)` | 라디안 단위. `double`, `float` 오버로드 |
+| `Math.Sin(x)`, `Math.Cos(x)`, `Math.Tan(x)` | 라디안 단위. `Q16`, `Milli` 오버로드 |
 | `Math.PI`, `Math.Tau`, `Math.Deg2Rad`, `Math.Rad2Deg` | 상수 (컴파일 타임에 계산) |
 | `Math.FloorDiv(a, b)`, `Math.FloorMod(a, b)` | `int` 내림 나눗셈 / 제수 부호를 따르는 나머지. 각각 스코어보드 명령어 하나 (`/`, `%` 연산자는 C#을 따릅니다 — [언어 가이드](language.md#나눗셈과-나머지) 참고) |
 
 동작 방식:
-- **수 형식:** `double`은 Q15.16 고정소수점입니다 (스코어 = 값 × 65536, 정밀도 1/65536, 범위 약 ±32768). `float`은 그대로 ×1000입니다. 섞어 쓰면 자동 변환되고, `double` → `float` 대입은 C#처럼 캐스트가 필요합니다.
+- **수 형식:** `Q16`은 Q15.16 고정소수점입니다 (스코어 = 값 × 65536, 정밀도 1/65536, 범위 약 ±32768). `Milli`은 그대로 ×1000입니다. 섞어 쓰면 자동 변환되고, `Q16` → `Milli` 대입은 C#처럼 캐스트가 필요합니다.
 - **테일러 급수가 아닌 룩업 테이블:** 각도를 2π로 나눈 나머지로 줄인 뒤 1024등분 원 위의 위치로 바꾸고, 257칸짜리 1/4 주기 사인 테이블(나머지 사분면은 대칭)에서 찾은 다음 이웃 칸 사이를 선형 보간합니다. 테이블은 `execute if score … matches` 함수의 이진 트리라서 모든 버전에서 동작합니다 (매크로 불필요). 전체 범위에서 오차는 약 2/65536 이내입니다.
-- **26.3+ (`/compute`):** 아래 연산들이 숫자 제공자(number provider) 식을 계산하는 명령 하나로 바뀝니다. `double *`(약 5배 빠름), `double /`(나누는 수가 128.0 미만이면 약 11배, 더 크면 기존 긴 나눗셈), `int` `/`·`%`(약 2.7배), `Sin`/`Cos`/`Tan`(약 13배). `*`, `/`, `%` 결과는 이전 버전과 비트 단위로 같습니다. 삼각함수는 게임 내장 65536칸 사인 표에 1차 보정을 더해 조금 더 정확하고(최대 오차 약 1.8/65536 → 1.6/65536), 그래서 마지막 자리가 이전 버전과 다를 수 있습니다. 차이 하나: 결과가 범위(±32768)를 넘는 `double` 곱셈은 26.3에서 순환값 대신 0이 됩니다.
+- **26.3+ (`/compute`):** 아래 연산들이 숫자 제공자(number provider) 식을 계산하는 명령 하나로 바뀝니다. `Q16 *`(약 5배 빠름), `Q16 /`(나누는 수가 128.0 미만이면 약 11배, 더 크면 기존 긴 나눗셈), `int` `/`·`%`(약 2.7배), `Sin`/`Cos`/`Tan`(약 13배). `*`, `/`, `%` 결과는 이전 버전과 비트 단위로 같습니다. 삼각함수는 게임 내장 65536칸 사인 표에 1차 보정을 더해 조금 더 정확하고(최대 오차 약 1.8/65536 → 1.6/65536), 그래서 마지막 자리가 이전 버전과 다를 수 있습니다. 차이 하나: 결과가 범위(±32768)를 넘는 `Q16` 곱셈은 26.3에서 순환값 대신 0이 됩니다.
 - `Cos(x)`는 같은 테이블을 1/4 바퀴 민 것이고, `Tan(x)`는 Q15.16 나눗셈으로 구한 `Sin/Cos`이며 ±π/2 근처에서는 ±32767.99로 포화됩니다.
 - 인자가 상수면 컴파일 타임에 계산합니다.
-- `double * double`, `double / double`은 32비트를 넘는 중간값이 필요해서 공용 헬퍼(`<ns>:__math/dmul`, `__math/ddiv`)를 호출합니다. 곱셈은 피연산자를 16비트씩 나눠 계산하고, 나눗셈은 16단계 긴 나눗셈을 합니다. 곱셈은 내림, 나눗셈은 C#처럼 0 방향 버림이며 둘 다 정확합니다. 결과가 범위를 넘는 나눗셈은 ±2147483647/65536으로 포화됩니다. 정수 상수로 곱하거나 나누면 스코어보드 연산 한 번으로 끝납니다.
+- `Q16 * Q16`, `Q16 / Q16`은 32비트를 넘는 중간값이 필요해서 공용 헬퍼(`<ns>:__math/dmul`, `__math/ddiv`)를 호출합니다. 곱셈은 피연산자를 16비트씩 나눠 계산하고, 나눗셈은 16단계 긴 나눗셈을 합니다. 곱셈은 내림, 나눗셈은 C#처럼 0 방향 버림이며 둘 다 정확합니다. 결과가 범위를 넘는 나눗셈은 ±2147483647/65536으로 포화됩니다. 정수 상수로 곱하거나 나누면 스코어보드 연산 한 번으로 끝납니다.
 - 헬퍼와 테이블은 실제로 쓸 때만 생성됩니다.
 
 ## ItemLib
@@ -523,6 +611,101 @@ public static void Main()
 | `Visible = ...` | 상수 또는 런타임 `bool` |
 | `Show(Player players)` / `Hide()` | 보이는 플레이어 지정 / 모두에게서 숨김 |
 | `Remove()` | 보스바 삭제 (다음 `/reload`에서 다시 생성) |
+
+---
+
+## WorldLib
+
+```csharp
+use WorldLib;
+
+int t = World.Time();                 // 하루 중 시간 0–23999 (Day(), GameTime()도 있음)
+World.SetTime(6000); World.AddTime(100);
+World.Weather = Weather.Rain;          // Clear / Rain / Thunder
+World.SetWeather(Weather.Clear, 600);  // 600초 동안
+World.Difficulty = Difficulty.Hard;
+World.GameRule("keepInventory", true);
+World.SetBorder(500, 30); World.SetBorderCenter(0, 0);
+World.Run(Dimension.Nether, () => m.Console.WriteLine("nether"));   // execute in minecraft:the_nether
+if (World.IsIn(Dimension.End)) { … }
+var p = new Position(0, 64, 0).In(Dimension.Nether);                 // 다른 차원의 위치
+```
+
+`Dimension`: `Overworld`, `Nether`, `End`. 버전마다 다른 명령어(26.1+의 `time query`, 1.21.11+의 월드 보더 시간 단위, 게임 규칙 이름)는 컴파일러가 맞춥니다. `GameRule`은 옛 이름(`keepInventory`)이나 새 이름(`keep_inventory`)을 받아 버전마다 맞는 이름을 씁니다. 1.21.11의 이름 변경(`doDaylightCycle` ↔ `advance_time`, 값이 뒤집힌 `disableRaids` ↔ `raids`)도 포함합니다.
+
+---
+
+## ParticleLib
+
+```csharp
+use ParticleLib;
+
+Particle.Spawn("flame", pos, 5);                          // count, speed = 0, force = false
+Particle.Spawn("end_rod", pos, 0.5, 0.5, 0.5, 20, 0.1);   // 퍼짐 dx dy dz, count, speed
+Particle.Dust(0xFF8000, pos, 1.5f);                       // 색 먼지 (버전별 문법)
+Particle.Line("crit", from, to, 0.25);                    // 선을 따라 찍기
+Particle.Circle("happy_villager", pos, 2, 16);            // 반지름, 점 개수
+```
+
+`Line`과 `Circle`은 컴파일 타임에 계산되므로(점 하나당 명령어 하나, 최대 512개) 위치 좌표가 상수여야 합니다.
+
+---
+
+## SoundLib
+
+```csharp
+use SoundLib;
+
+Sound.Play("entity.experience_orb.pickup", pos, 1, 2);          // volume, pitch, source = Master
+Sound.PlayTo(Player.All, "block.note_block.bell", 0.5f, 1, SoundSource.Record);
+Sound.Stop(Player.All);                                          // 또는 Stop(players, "sound.id")
+```
+
+---
+
+## NbtLib
+
+```csharp
+use NbtLib;
+
+Storage.Set("cfg.level", 3);                  // <ns>:data cfg.level
+Storage.Set("cfg.name", name);                // NString / string
+Storage.SetNbt("cfg.list", "[1,2,3]");        // 아무 SNBT
+int lv = Storage.Get<int>("cfg.level");
+NString n = Storage.Get<NString>("cfg.name");
+bool has = Storage.Has("cfg.level");
+int len = Storage.Count("cfg.list");          // 리스트 크기 / 문자열 길이
+Storage.Copy("cfg", "backup"); Storage.Remove("cfg.level"); Storage.Merge("{a:1}");
+Storage.Get<int>("score", storage: "other:data");    // 아무 storage id
+
+Nbt.Set(e, "CustomName", "Boss");             // 엔티티: Entity 또는 엔티티 참조
+int air = Nbt.Get<int>(e, "Air");
+Nbt.Merge(new Position(1, 64, 2), "{Lock:\"key\"}");  // 블록 엔티티: Position
+Nbt.Save(e, "Inventory", "saved.inv");        // NBT를 storage로 복사
+```
+
+`T`는 `int`, `bool`, `Milli`, `Q16`, `NString`입니다. 숫자는 `data get … <배율>`로 읽으므로 그 타입의 정밀도에서 내림됩니다. 플레이어의 NBT는 읽을 수만 있습니다(마인크래프트 제한).
+
+---
+
+## TeamLib
+
+```csharp
+use TeamLib;
+
+static Team red = new Team("red", "Red Team") { Color = Color.Red, FriendlyFire = false };
+static Objective kills = new Objective("kills", "playerKillCount", "Kills");
+
+red.Join(Player.Self);  red.Leave(Player.Self);
+if (red.Has(Player.Self)) { … }
+int n = red.Count;  red.Players.SendMessage("go!");
+kills[Player.Self] += 1;       // 아무 점수: 엔티티, 플레이어, 가짜 이름("#total")
+kills.Add("#total", 5);  kills.Reset("#total");
+kills.Show();                  // 사이드바
+```
+
+- 팀과 objective는 주어진 이름 그대로 load 때 만들어집니다. `Team` 속성: `Color`(TuiLib `Color`), `FriendlyFire`, `SeeFriendlyInvisibles`, `Prefix`, `Suffix`, `DisplayName`, `NameTags`, `DeathMessages`(`Visibility`), `Collision`.
+- `kills[…]`를 읽을 때는 대상이 하나여야 합니다. `Player.All` 같은 선택자로 쓰면 해당하는 점수가 모두 바뀝니다.
 
 ---
 

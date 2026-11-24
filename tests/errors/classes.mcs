@@ -1,0 +1,29 @@
+use EntityLib;
+class Node { public int V; public Node Next; }
+class Named { public string Name; }
+class Vec { public int X; }
+
+static T Fact<T>(T n) where T : System.Numerics.INumber<T> => n <= T.One ? T.One : n * Fact(n - T.One);
+static Entity lost;
+static extern void Nowhere();
+
+public static void Main() {
+    var a = new Vec();
+    var b = new Vec();
+    if (a.X == 0) a = b;
+    Vec n = null;
+    var arr = new NArray<Vec>();
+    NString s = "x";
+    int k = 3;
+    s = s + k;
+    int f = Fact(5);
+}
+// @error Node contains itself
+// @error Instance fields cannot be compile-time strings (Named.Name); use NString.
+// @error 'a' refers to an object fixed at compile time and cannot be pointed at another object inside if/loops/switch.
+// @error Objects cannot be null in MC#
+// @error NArray elements must be int, bool, Milli, Q16 or NString (not Vec).
+// @error [1.20.1] Joining strings at run time needs function macros (1.20.2+).
+// @error Recursive generic methods are not supported (Fact).
+// @error Static Entity fields must be bound to the world with m.MountEntity
+// @error extern methods need [External("namespace:function")]

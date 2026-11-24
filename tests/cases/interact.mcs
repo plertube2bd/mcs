@@ -1,0 +1,73 @@
+// Entity interactions, m.MountEntity / m.MountBlock, NBT of entities, calls into other datapacks.
+// @mc 1.20.3-26.3
+// @real load               (entity NBT and blocks: the simulator has no world)
+use EntityLib;
+use BlockLib;
+use NbtLib;
+use WorldLib;
+
+static Entity boss;
+m.MountEntity(boss, "boss");
+static OakDoor door;
+m.MountBlock(door, new Position(5, 64, 5));
+
+// Calls into "another" pack — here this pack's own functions, so the test can check the results.
+[External("interact:api/ping")] static extern void Ping();
+[External("interact:api/add")] static extern int Add(int a, int b);
+[External("#interact:hooks")] static extern void Hooks();   // a function tag (not called here)
+
+[McsPack("interact")]
+static class Lib {
+    public static extern int Square(int x);
+}
+
+public static int Square(int x) => x * x;
+
+// "hand-written" datapack functions: interact:api/ping and interact:api/add (a macro function)
+static class Api {
+    public static void Ping() { m.Console.WriteLine("pong"); }
+    public static void Add() {
+        asm {
+            $scoreboard players set #a mcs.interact $(a)
+            $scoreboard players set #b mcs.interact $(b)
+            scoreboard players operation #a mcs.interact += #b mcs.interact
+            return run scoreboard players get #a mcs.interact
+        }
+    }
+}
+
+public static void Main() {
+    asm summon minecraft:zombie ~ ~ ~ {Tags:["boss"]}
+    new Entity : Horse h;
+    if (!m.SpawnEntityObject(h, Position.Here)) return;
+    boss.Damage(4f, "magic", h);
+    boss.Ride(h);
+    boss.Dismount();
+    boss.Effect("speed", 10, 1);
+    boss.TeleportTo(h);
+    boss.LookAt(h);
+    boss.SetMotion(0, 0.5, 0);
+    boss.AddTag("angry");
+    m.Console.WriteLine($"angry={boss.HasTag("angry")} exists={boss.Exists} near={boss.IsNear(h, 5)} over={boss.IsIn(Dimension.Overworld)}");
+
+    var box = new Interaction { Width = 2f, Height = 1f, Response = true };
+    if (!m.SpawnEntityObject(box, Position.Here)) return;
+    if (box.Clicked()) box.Clicker.SendMessage("clicked!");
+
+    Nbt.Set(boss, "DeathLootTable", "minecraft:empty");
+    Nbt.Set(h, "Tame", true);
+    int air = Nbt.Get<int>(boss, "Air");
+    Nbt.Save(boss, "Pos", "boss.pos");
+    Nbt.Merge(new Position(1, 2, 3), "{Lock:\"key\"}");
+    m.Console.WriteLine($"air={air} saved={Storage.Has("boss.pos")}");
+
+    door.Open = true;
+    bool open = door.Open;
+    if (door.Facing == Facing.North) m.Console.WriteLine("north");
+
+    Ping();
+    int s = Add(2, 3);
+    int q = Lib.Square(7);
+    m.Call("interact:api/ping");
+    m.Console.WriteLine($"s={s} q={q} open={open}");
+}

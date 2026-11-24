@@ -1,0 +1,24 @@
+// [MinecraftDivision]: / and % are one scoreboard operation (floor), [CSharpDivision] switches back.
+static int a = -7, b = 2;
+
+[MinecraftDivision]
+static void Fast() {
+    int q = a / b, r = a % b;
+    Milli f = -7.5f;
+    f /= 2;
+    m.Console.WriteLine($"fast: {q} {r} {f} {a / 3} {a % -3}");
+}
+
+static void Normal() => m.Console.WriteLine($"csharp: {a / b} {a % b} {a / 3} {a % -3}");
+
+[MinecraftDivision]
+static class Grid {
+    public static int Cell(int x) => x / 16;
+    [CSharpDivision] public static int Exact(int x) => x / 16;
+}
+
+public static void Main() {
+    Fast();
+    Normal();
+    m.Console.WriteLine($"cell={Grid.Cell(-1)} exact={Grid.Exact(-1)} floordiv={MathLib.Math.FloorDiv(-1, 16)}");
+}

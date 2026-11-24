@@ -14,9 +14,9 @@ static int Gcd(int a, int b) { if (b == 0) return a; return Gcd(b, a % b); }
 // recursion inside loops, locals that must survive the call, double and bool parameters
 static int[] xs = { 3, 1, 4, 1, 5, 9 };
 static int Sum(int i) => i >= xs.Length ? 0 : xs[i] + Sum(i + 1);
-static double Pow(double x, int n, bool half) {
+static Q16 Pow(Q16 x, int n, bool half) {
     if (n == 0) return 1.0;
-    double rest = Pow(x, n - 1, !half);
+    Q16 rest = Pow(x, n - 1, !half);
     return half ? rest * x / 2.0 * 2.0 : rest * x;
 }
 static int Tree(int depth) {

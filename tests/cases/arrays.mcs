@@ -1,7 +1,7 @@
 // Writable arrays: constant and runtime indexes, references, foreach, printing.
 static int[] grid = new int[20];
 static int[] primes = { 2, 3, 5, 7, 11 };
-static double[] ws = { 0.5, 1.25, -2 };
+static Q16[] ws = { 0.5, 1.25, -2 };
 static readonly int[] Cost = { 0, 20, 15 };      // compile-time table
 
 [Inline] static int Sum(int[] xs) {
@@ -35,7 +35,7 @@ public static void Main() {
 
     bool[] flags = new bool[4];
     flags[k - 5] = true;
-    float[] fs = { 1.5f, 2.25f };
+    Milli[] fs = { 1.5f, 2.25f };
     fs[1] *= 2;
     ws[k - 6] = ws[0] + ws[2];
     m.Console.WriteLine($"flags={flags} fs={fs} ws={ws}");

@@ -59,9 +59,121 @@ var me = Entities.Self<Nation>();                                    // @s
 - **중첩:** 반복 변수, `this`, 매개변수는 중첩된 반복이나 람다 안에서도 그대로 유효합니다. 필요할 때 컴파일러가 엔티티에 태그를 붙입니다.
 - **조회 결과:** `Nearest`, `Random`, `First`, `Spawn`의 결과는 태그로 붙잡아 두므로, 실행 위치나 대상이 바뀌어도 계속 유효합니다.
 
+## 숫자 타입: Milli와 Q16
+
+MC#의 숫자는 스코어이므로 소수는 고정소수점입니다. MC# 이름이 실제 표현을 그대로 나타냅니다:
+
+| 타입 | 저장 방식 | 정밀도 | 범위 |
+|---|---|---|---|
+| `int` | 스코어 | 1 | ±2147483647 |
+| `Milli` | 스코어 ×1000 | 0.001 | ±2147483.647 |
+| `Q16` | 스코어 ×65536 (Q15.16) | 1/65536 ≈ 0.0000153 | ±32768 |
+
+```csharp
+Milli speed = 1.25f;      // 리터럴은 C#처럼 f 접미사를 붙입니다
+Q16 angle = 0.5;
+Milli back = (Milli)(angle * 2);
+```
+
+`float`와 `double`은 같은 두 타입의 옛 이름입니다. 지금도 컴파일되지만 쓸 때마다 경고가 나오고, 앞으로 어느 버전에서든 삭제될 수 있습니다:
+
+```
+hello.mcs(3,8): warning MCS: 'float' is deprecated: use Milli. 'float' still works for now, but may be removed in any future version.
+```
+
+## 클래스
+
+일반 클래스(와 구조체)는 C#처럼 동작합니다: 필드, 자동 속성, 생성자, 메서드, `this`, 상속, `virtual` / `abstract` / `override`, 출력용 `ToString()` 재정의.
+
+```csharp
+class Vec {
+    public int X, Y;
+    public Vec(int x, int y) { X = x; Y = y; }
+    public int Len2() => X * X + Y * Y;
+    public void Add(Vec o) { X += o.X; Y += o.Y; }
+    public override string ToString() => $"({X}, {Y})";
+}
+
+static Vec origin = new Vec(0, 0);         // static 객체는 처음 로드될 때 한 번 만들어집니다
+
+public static void Main() {
+    var a = new Vec(3, 4);
+    Vec b = a;                              // 같은 객체
+    b.X = 10;
+    a.Add(new Vec(1, 1));
+    m.Console.WriteLine($"{a} {a.Len2()}");  // (11, 5) 146
+}
+```
+
+컴파일 방식:
+
+- **필드는 스코어입니다.** 객체의 필드는 스코어로 펼쳐지므로(`$main.a.X`) 필드 읽기·쓰기는 스코어보드 명령어 하나입니다. NBT도 매크로도 필요 없고 모든 버전에서 동작합니다. NString / NArray 필드는 storage에 둡니다.
+- **메서드는 함수입니다.** 메서드마다 `this` 프레임이 있어서, `a.Add(o)`는 `a`를 프레임에 복사하고 `<ns>:vec/add`를 실행한 뒤 다시 복사해 옵니다(메서드가 객체를 바꿀 수 있을 때만). 생성자도 각각 함수입니다.
+- **참조는 컴파일 타임에 정해집니다.** `Vec b = a;`는 `b`를 같은 객체로 만들고, 객체를 메서드에 넘기면 메서드가 그 객체를 바꿀 수 있습니다. 조건에 따라 변수가 다른 객체를 가리킬 수는 없습니다(`if (c) b = other;`는 오류 — 필드를 대입하세요). `null`도 없습니다.
+- **필드 안의 객체는 내장됩니다.** `class Rect { public Vec Min; }`는 `Vec`의 필드를 `Rect` 안에 저장하고, `r.Min = v`는 `v`의 필드를 복사합니다. 그래서 클래스는 자기 자신의 타입을 담을 수 없습니다(연결 리스트 불가).
+- **가상 호출은 컴파일 타임에** 객체의 실제 클래스로 정해집니다. 부모 클래스에서 물려받은 메서드는 클래스마다 한 벌씩 만들어지므로, 그 안의 호출도 해당 클래스의 재정의로 갑니다.
+- `ToString()`은 식 하나(`=> $"…"`)여야 하고, 객체를 출력하는 자리에서 계산됩니다. 없으면 `Vec(X: 3, Y: 4)`처럼 출력됩니다.
+- 지원하지 않는 것: 생성자 연결(`: this(…)` / `: base(…)`), `null`, 계산 속성(메서드를 쓰세요), 객체를 받거나 돌려주는 재귀 메서드.
+
+## 제네릭
+
+제네릭 메서드와 제네릭 클래스는 타입 인자 조합마다 한 번씩 컴파일됩니다(`Max<int>` → `<ns>:max_int`, `Box<Milli>` → `<ns>:box_milli/…`). 연산자는 .NET 제네릭 수학 인터페이스로 씁니다:
+
+```csharp
+using System.Numerics;
+
+static T Max<T>(T a, T b) where T : INumber<T> => a > b ? a : b;
+
+class Box<T> where T : INumber<T> {
+    public T Value;
+    public Box(T v) { Value = v; }
+    public T Twice() => Value + Value;
+}
+
+m.Console.WriteLine($"{Max(3, 9)} {Max(1.5f, -2f)} {new Box<Q16>(0.25).Twice()}");   // 9 1.500 0.50000
+```
+
+- `T.Zero`, `T.One`, `default`를 쓸 수 있습니다. 타입 인자는 `int`, `bool`, `Milli`, `Q16`, 클래스, `NString`, `NArray<…>`가 될 수 있습니다.
+- 재귀 제네릭 메서드는 지원하지 않습니다.
+
+## 런타임 문자열과 배열: NString, NArray<T>
+
+`string`은 컴파일 타임 상수입니다. 실행 중에 바뀌는 문자열은 **`NString`**, 실행 중에 길이가 바뀌는 배열은 **`NArray<T>`**(`T`: `int`, `bool`, `Milli`, `Q16`, `NString`)를 씁니다. 둘 다 NBT storage(`<ns>:mcs`)에 저장됩니다.
+
+```csharp
+NString name = "Steve";
+int hp = 17;
+NString line = $"{name} has {hp} HP";      // 실행 중에 이어 붙임
+line += "!";
+if (line.StartsWith("Steve")) m.Console.WriteLine(line);
+
+var scores = new NArray<int> { 4, 9 };
+scores.Add(hp);
+scores[0] += 1;
+int best = 0;
+foreach (int s in scores) if (s > best) best = s;
+m.Console.WriteLine($"{scores} best={best} n={scores.Length}");   // [5, 9, 17] best=17 n=3
+```
+
+| NString | | NArray<T> | |
+|---|---|---|---|
+| `"text"`, `$"… {x} …"`, `a + b`, `+=` | ① | `new NArray<T>()`, `new NArray<T>(n)`, `{ 1, 2 }` | |
+| `==`, `!=` | | `a[i]`, `a[i] = v`, `a[i] += v` | ② |
+| `Length`, `IsEmpty` | | `Length` / `Count` | |
+| `Substring(start[, length])`, `s[i]` | ② | `Add(v)`, `Insert(i, v)` ②, `RemoveAt(i)` ②, `Pop()`, `Clear()` | |
+| `StartsWith`, `EndsWith` | | `foreach` | |
+| `IndexOf`, `Contains`, `ToInt()` | ① | 출력: `{a}` → `[1, 2, 3]` | |
+
+① 함수 매크로가 필요합니다(1.20.2+). ② 인덱스가 런타임 값일 때만 1.20.2+가 필요합니다(상수 인덱스는 모든 버전에서 동작).
+
+- `NString`은 값입니다: 대입하면 문자열이 복사됩니다. `NArray`는 객체처럼 참조입니다(`b = a`는 같은 배열이고, 메서드에 넘기면 메서드가 바꿀 수 있습니다).
+- 문자열 이어 붙이기는 매크로를 거치므로 `"`나 `\`가 들어간 문자열은 이어 붙일 수 없습니다.
+- 범위를 벗어나 읽으면 0이 되거나 결과가 바뀌지 않습니다. 마인크래프트는 예외를 던질 수 없습니다.
+- `NArray<Milli>`는 ×1000 정수를 그대로 저장하므로(정확함), 출력하면 그 정수가 보입니다.
+
 ## 배열
 
-`int[]`, `bool[]`, `float[]`, `double[]`는 쓰기 가능한 배열이며 정적 필드나 지역 변수로 쓸 수 있습니다. 길이는 컴파일 타임에 정해집니다.
+`int[]`, `bool[]`, `Milli[]`, `Q16[]`는 쓰기 가능한 배열이며 정적 필드나 지역 변수로 쓸 수 있습니다. 길이는 컴파일 타임에 정해집니다.
 
 ```csharp
 static int[] grid = new int[20];          // 0으로 채움
@@ -138,8 +250,19 @@ m.Console.WriteLine($"{Math.FloorDiv(a, 2)} {Math.FloorMod(a, 2)}"); // -4 1  (u
 
 - 스코어보드의 `/=`, `%=`는 음의 무한대 방향으로 내림하기 때문에 컴파일러가 부호 처리를 덧붙입니다. 상수로 나누면 명령어 4개, 런타임 값으로 나누면 공용 헬퍼(`<ns>:__math/idiv` / `irem`)를 호출합니다.
 - `Math.FloorDiv` / `Math.FloorMod`(MathLib)는 명령어 하나짜리 내림 버전입니다. 값이 음수가 아님을 알고 있는 자주 도는 코드나, 내림이 필요할 때 쓰세요.
-- `float` / `double` 나눗셈도 (고정소수점 마지막 자리에서) 0 방향으로 버리고, `%`도 같은 방식입니다. `float`/`double`의 `(int)x` 변환도 C#처럼 0 방향으로 버립니다.
+- `Milli` / `Q16` 나눗셈도 (고정소수점 마지막 자리에서) 0 방향으로 버리고, `%`도 같은 방식입니다. `Milli`/`Q16`의 `(int)x` 변환도 C#처럼 0 방향으로 버립니다.
 - 0으로 나누면 예외를 던질 수 없으므로 값이 바뀌지 않습니다.
+
+### 마인크래프트 나눗셈 (더 빠름)
+
+C# 나눗셈은 부호 처리 때문에 명령어가 더 듭니다. 내림이어도 괜찮다면 `/`와 `%`를 마인크래프트의 스코어보드 연산 하나로 컴파일하게 할 수 있습니다. 이때는 음의 무한대 방향으로 내림하고, `%`는 제수의 부호를 따릅니다(`-7 / 2 = -4`, `-7 % 2 = 1`):
+
+```csharp
+[MinecraftDivision] static int Cell(int x) => x / 16;      // 메서드 하나 (또는 클래스 전체)
+[CSharpDivision] static int Exact(int x) => x / 16;        // 다시 C# 방식으로
+```
+
+프로젝트 전체에 적용하려면 `mcs.json`에 `"division": "minecraft"`를 넣습니다(또는 `--division minecraft`). `Q16 / Q16`은 어느 쪽이든 정확한 헬퍼를 그대로 씁니다.
 
 ## 재귀
 
@@ -261,6 +384,28 @@ use PlayerLib;
 ## 명령어를 실행하는 채팅 버튼
 
 `new Button("[건설]", "trigger war.act set 3")`은 지정한 명령어를 실행하는 버튼을 만듭니다. `new Button(label, Method)`는 MC# 메서드를 호출하는 버튼을 만듭니다.
+
+## 다른 데이터팩 호출
+
+MC#의 출력은 다른 팩이 전혀 필요 없지만, 원하면 다른 팩을 호출할 수 있습니다. 그러면 여러분의 팩이 그 팩에 의존하게 됩니다(컴파일러가 아니라 여러분의 선택입니다).
+
+```csharp
+[External("other:api/ping")] static extern void Ping();                 // function other:api/ping
+[External("other:api/add")] static extern int Add(int a, int b);        // function other:api/add {a:…, b:…}
+[External("#other:hooks")] static extern void Hooks();                  // 함수 태그
+
+[McsPack("lib")]                       // MC#으로 컴파일된 팩 (네임스페이스 lib)
+static class Lib {
+    public static extern int Square(int x);   // $square.x mcs.lib 설정 → lib:square 실행 → $square#ret mcs.lib 읽기
+}
+
+int s = Add(2, 3) + Lib.Square(4);
+m.Call("other:setup");                 // 이름으로 아무 함수나 #태그 실행
+```
+
+- `[External]`의 매개변수는 매크로 인자(`$(a)`, 1.20.2+)가 됩니다: `int`, `bool`, `Milli`, `Q16`, `string`, `NString`. `int` / `bool` 결과는 그 함수의 `/return` 값입니다.
+- `[McsPack("ns", "Class")]`는 다른 팩의 `Class` 클래스에 선언된 메서드를 부릅니다(`ns:class/method`). 매개변수와 결과는 그 팩의 스코어를 쓰므로 `int`, `bool`, `Milli`, `Q16`이어야 합니다.
+- 다른 팩이 먼저 로드되어 있어야 합니다(그 팩의 objective는 그 팩의 load 함수가 실행된 뒤에 생깁니다).
 
 ## 리소스
 

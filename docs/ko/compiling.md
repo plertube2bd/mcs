@@ -55,6 +55,7 @@ public static void Main() {
 | `minecraft` | 대상 버전 또는 범위 (아래 참고) | `1.20.1-26.3` |
 | `resources` | 데이터팩에 그대로 복사할 폴더 (월드 생성, 태그 등) | — |
 | `description` | `pack.mcmeta` 설명 | `MC# datapack: <ns> (...)` |
+| `division` | `csharp`: `/`와 `%`가 C#과 같음(0 방향). `minecraft`: 스코어보드 연산 하나, 음의 무한대 방향(더 빠름, [나눗셈](language.md#마인크래프트-나눗셈-더-빠름) 참고) | `csharp` |
 
 ### b) 명령줄
 
@@ -66,6 +67,7 @@ public static void Main() {
 |---|---|---|
 | `<file.mcs ...>` | 소스 파일. 여러 개를 넘기면 하나의 데이터팩으로 묶입니다. | (필수) |
 | `--mc <버전>` / `--mc <최소>-<최대>` | 대상 마인크래프트 버전 또는 범위 | `1.20.1-26.3` |
+| `--division csharp\|minecraft` | `/`와 `%`의 반올림 방식 (`mcs.json`의 `division`과 같음) | `csharp` |
 | `-o`, `--out <dir>` | 출력할 데이터팩 폴더 | `out/<네임스페이스>` |
 | `-n`, `--namespace <ns>` | 데이터팩 네임스페이스 | 첫 번째 파일 이름 |
 | `--versions` | 지원 버전, 팩 포맷, `#if` 심볼 목록 출력 | — |
@@ -100,14 +102,14 @@ Build succeeded: out/versions (Minecraft 1.20.1 – 26.3)
 | 1.21.2+ | 속성 ID에서 `generic.` 제거, `boat` → `oak_boat` | 알맞은 ID로 출력 |
 | 1.21.9+ | `pack.mcmeta`가 `min_format`/`max_format` 사용 | 알맞은 필드로 출력 |
 | 1.21.9+ | 스폰 청크 삭제 (`#load` 실행 시점에 로드된 청크가 없음) | `GetWorldSpawn()`을 쓰거나 엔티티 소환·블록 설치를 하면 스폰 청크를 forceload하고, 로드가 끝난 뒤 `Main` 시작 |
-| 26.3+ | `/compute` (숫자 제공자 식) | `double` `*` `/`, C# `int` `/` `%`, `Math.Sin/Cos/Tan`이 도우미 함수 대신 명령 하나로 |
+| 26.3+ | `/compute` (숫자 제공자 식) | `Q16` `*` `/`, C# `int` `/` `%`, `Math.Sin/Cos/Tan`이 도우미 함수 대신 명령 하나로 |
 
 ### 코드 안에서 분기하기 (`#if`)
 
 버전 그룹마다 `MC_<버전>_OR_GREATER` 형식의 심볼이 정의됩니다 (.NET의 `NET6_0_OR_GREATER`와 같은 방식). C#의 `#if`로 사용합니다:
 
 ```csharp
-float hp = 30f;
+Milli hp = 30f;
 #if MC_1_20_2_OR_GREATER
     hp = hp + 20f;
     h.maxHealth = hp;        // 실행 중 값 → 매크로 사용 (1.20.2+)
@@ -140,6 +142,7 @@ MC_26_1_OR_GREATER    MC_26_2_OR_GREATER    MC_26_3_OR_GREATER
 - `CSxxxx`로 시작하는 오류는 Roslyn이 보고한 C# 타입·문법 오류입니다.
 - 그 밖의 오류는 마인크래프트(또는 대상 버전 중 일부)에서 표현할 수 없는 기능을 사용했다는 뜻입니다.
 - `[1.20.1]`처럼 앞에 버전이 붙은 오류는 그 버전에만 해당합니다.
+- **경고**(`파일(줄,열): warning MCS: …`)는 빌드를 멈추지 않습니다. 지금은 폐지 예정인 이름을 알려 줍니다: `float` / `double`은 아직 동작하지만 `Milli` / `Q16`으로 바꿔야 합니다.
 
 ## 6. 월드에 적용
 
@@ -200,7 +203,7 @@ dotnet bin/Release/net8.0/mcs.dll ../../examples/hello.mcs -o ../../out/hello
 | `Prelude.cs` | 내장 라이브러리의 C# 선언 ([라이브러리 레퍼런스](libraries.md) 참고) |
 | `Codegen.cs` | 구문 트리 → mcfunction (언어 핵심) |
 | `Codegen.Libs.cs` | BlockLib / PlayerLib / TuiLib / SpawnEntity / SetWorldSpawn |
-| `Codegen.Math.cs` | `double`(Q15.16) 곱셈/나눗셈 헬퍼, C# 정수 나눗셈 헬퍼, MathLib (sin/cos/tan 룩업 테이블) |
+| `Codegen.Math.cs` | `Q16`(Q15.16) 곱셈/나눗셈 헬퍼, C# 정수 나눗셈 헬퍼, MathLib (sin/cos/tan 룩업 테이블) |
 | `Codegen.Gui.cs` | GuiLib (표시 슬롯, `Board`, `BossBar`) |
 | `Codegen.Array.cs` | 쓰기 가능한 배열 (원소 스코어, 런타임 인덱스 탐색 트리) |
 | `Codegen.Objects.cs` | ItemLib, 오브젝트 한 번만 사용 규칙 (`Clone`, `Dispose`, 실행 시간 검사) |
@@ -228,7 +231,7 @@ python3 tests/run.py -u           # 기대 출력 다시 쓰기 — 그 뒤 git 
 | `tests/errors/*.mcs` | 컴파일이 실패해야 하고, 모든 `// @error <텍스트>` 줄이 에러에 나와야 합니다. |
 | `examples/*.mcs` | 컴파일되어야 합니다. |
 
-케이스 안의 지시문: `// @mc 1.20.2-26.3`(버전 범위), `// @ticks 100`(시뮬레이션 길이. 기본은 예약된 작업이 없을 때까지, `[Tick]` 메서드가 있으면 20틱), `// @do 5 die Steve`(플레이어 행동 스크립트, 여러 줄 가능 — 아래 참고).
+케이스 안의 지시문: `// @mc 1.20.2-26.3`(버전 범위), `// @ticks 100`(시뮬레이션 길이. 기본은 예약된 작업이 없을 때까지, `[Tick]` 메서드가 있으면 20틱), `// @do 5 die Steve`(플레이어 행동 스크립트, 여러 줄 가능 — 아래 참고), `// @warning <텍스트>`(빌드가 이 경고를 출력해야 함), `// @real load`(실제 서버에서는 로드만 검사 — 시뮬레이터에 없는 블록이나 엔티티 NBT에 기대는 케이스용).
 
 **시뮬레이터**(`tools/mcsim.py`)는 빌드된 데이터팩을 마인크래프트 없이 실행합니다:
 
@@ -257,7 +260,7 @@ python3 tests/run.py --real --servers=2 arrays           # 서버 2개씩 동시
 - Java(21+, 26.x는 25)가 필요하고, 처음 쓰는 버전은 인터넷에서 받습니다. 서버 jar는 Mojang에서 한 번 받아 `~/.cache/mcs/servers`에 보관합니다.
 - 팩을 하나씩 켜서 실행하고 다시 끕니다. 1.20.3+에서는 서버를 멈춘 뒤 `tick step`으로 진행해서 시뮬레이터와 정확히 같은 틱만큼 실행합니다. 1.20.1/1.20.2는 실제 시간으로 실행합니다.
 - **실패 조건:** 그 팩에 대해 서버가 남긴 ERROR/WARN 로그(파싱이 안 되는 함수, 잘못된 태그·발전과제·오버레이 등), 그리고 **시뮬레이터와 다른 점수**(`$x` / `#x` 같은 가짜 플레이어, `scoreboard players list`로 읽음).
-- 플레이어 스크립트(`// @do`)가 있는 케이스는 로드 검사만 합니다 (서버에 플레이어가 없음). 1.20.1/1.20.2의 `[Tick]` 케이스도 마찬가지입니다.
+- 플레이어 스크립트(`// @do`)나 `// @real load`가 있는 케이스는 로드 검사만 합니다 (서버에 플레이어가 없음). 1.20.1/1.20.2의 `[Tick]` 케이스도 마찬가지입니다.
 
 ## 10. 에디터 지원 (VS Code)
 

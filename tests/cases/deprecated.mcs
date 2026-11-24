@@ -1,0 +1,10 @@
+// float / double still compile (with a warning); Milli / Q16 are the same types.
+// @warning 'float' is deprecated: use Milli.
+// @warning 'double' is deprecated: use Q16.
+static float f = 1.5f;
+static double d = 0.25;
+public static void Main() {
+    Milli m2 = f * 2;
+    Q16 q = d + 1;
+    m.Console.WriteLine($"{m2} {q}");
+}

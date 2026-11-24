@@ -3,7 +3,7 @@ use EntityLib;
 // Version-branching example: 1.20.2+ uses a runtime value (macro), 1.20.1 uses a constant
 public static void Main() {
     new Entity : Husk h;
-    float hp = 30f;
+    Milli hp = 30f;
 #if MC_1_20_2_OR_GREATER
     hp = hp + 20f;
     h.maxHealth = hp;

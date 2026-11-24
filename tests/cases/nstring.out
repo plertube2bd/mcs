@@ -1,0 +1,13 @@
+[t0] hp=17 s=abc
+[t0] s=abcdef len=6 sub=bcd c=e tail=ef
+[t0] eq=True ne=False starts=True ends=True no=False
+[t0] idx=2 miss=-1 has=True
+[t0] toint=1235 greet=Hello, MC#!
+[t0] a=[50, 99, 18, -3] len=4 a[i]=18 last=-3
+[t0] after=[99, 18] pop=-3 sum=117
+[t0] names=[ann, BOB, abcdef] n0=ann n2=abcdef
+[t0] fs0=5.000 fs1=2.500
+[t0] log=[1, 2, 3]
+[t0] Steve best=9
+[t0] lv=3 sp=1.500 nm=abcdef has=True cnt=3
+[t0] gone=True

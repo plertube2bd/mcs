@@ -10,7 +10,7 @@ namespace Mcs.Compiler;
 ///   use X;                            -> using X;
 ///   new T : K x;                      -> T x = new T(TType.K);
 ///   string.join                       -> string.Join
-///   top-level m.Mount(...);           -> static readonly bool __mount_N = m.Mount(...);  (a declaration)
+///   top-level m.Mount(...);           -> static readonly bool __mount_N = m.Mount(...);  (a declaration; also MountEntity / MountBlock)
 ///   top-level asm ...                 -> static void __topasm_N() => __asm(...);  (run on load)
 ///   top-level methods and fields      -> wrapped in a static partial class __Global
 /// </summary>
@@ -187,7 +187,7 @@ public static class Preprocessor
 
             // top-level m.Mount(...);  ->  a field, so it can live in the class body
             if (depth == 0 && t.IsKind(SyntaxKind.IdentifierToken) && t.ValueText == "m" && k + 3 < toks.Count
-                && toks[k + 1].IsKind(SyntaxKind.DotToken) && toks[k + 2].ValueText == "Mount" && toks[k + 3].IsKind(SyntaxKind.OpenParenToken)
+                && toks[k + 1].IsKind(SyntaxKind.DotToken) && toks[k + 2].ValueText is "Mount" or "MountEntity" or "MountBlock" && toks[k + 3].IsKind(SyntaxKind.OpenParenToken)
                 && (k == 0 || toks[k - 1].Kind() is SyntaxKind.SemicolonToken or SyntaxKind.CloseBraceToken or SyntaxKind.CloseBracketToken))
             {
                 edits.Add((t.SpanStart, 0, $"static readonly bool {MountFieldPrefix}{t.SpanStart} = "));

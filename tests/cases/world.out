@@ -1,0 +1,297 @@
+=== format 18 ===
+[t0] > team add red {"text":"Red Team"}
+[t0] > team add blue
+[t0] > team modify red color red
+[t0] > team modify red friendlyFire false
+[t0] > time query daytime
+[t0] > time set 6000
+[t0] > weather rain
+[t0] > weather clear 600s
+[t0] > difficulty hard
+[t0] > gamerule keepInventory true
+[t0] > gamerule randomTickSpeed 5
+[t0] > gamerule doDaylightCycle false
+[t0] > gamerule disableRaids true
+[t0] > worldborder set 500 30
+[t0] in the nether
+[t0] > time query day
+[t0] > execute store success score $main#t2 mcs.world if dimension minecraft:the_nether
+[t0] day=1 nether=False
+[t0] > fill 0 64 0 3 66 1 minecraft:stone
+[t0] > fill 0 64 0 3 66 1 minecraft:dirt replace minecraft:stone
+[t0] > clone 0 64 0 3 66 1 10 64 0
+[t0] > clone 0 64 0 3 66 1 0 67 0
+[t0] > clone 0 64 0 3 66 1 0 70 0
+[t0] > clone 0 64 0 3 66 1 0 64 5
+[t0] > clone 0 64 0 3 66 1 100 0 100
+[t0] > clone 0 64 0 3 66 1 20 64 0
+[t0] > clone 100 0 100 103 2 101 30 64 0 masked
+[t0] > clone 0 64 0 3 66 1 40 64 0 replace move
+[t0] > fill ~ ~ ~ ~2 ~ ~2 minecraft:air
+[t0] > particle minecraft:flame ~ ~ ~ 0 0 0 0 5
+[t0] > particle minecraft:end_rod 0 70 0 0.5 0.5 0.5 0.1 20
+[t0] > particle minecraft:dust 1.0 0.501961 0.0 1.5 ~ ~1 ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~2 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~-2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~-2 0 0 0 0 1
+[t0] > particle minecraft:crit 0 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 0.5 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 1 64 0 0 0 0 0 1
+[t0] > playsound minecraft:entity.experience_orb.pickup master @a ~ ~ ~ 1 2
+[t0] > stopsound @a
+[t0] > team modify blue prefix {"text":"[B] "}
+[t0] > team modify blue collisionRule never
+[t0] > team join red @a[name=Steve]
+[t0] > team join blue Alex
+[t0] members=0 has=False
+[t0] total=17 has=True
+[t0] > scoreboard objectives setdisplay sidebar kills
+=== format 41 ===
+[t0] > team add red {"text":"Red Team"}
+[t0] > team add blue
+[t0] > team modify red color red
+[t0] > team modify red friendlyFire false
+[t0] > time query daytime
+[t0] > time set 6000
+[t0] > weather rain
+[t0] > weather clear 600s
+[t0] > difficulty hard
+[t0] > gamerule keepInventory true
+[t0] > gamerule randomTickSpeed 5
+[t0] > gamerule doDaylightCycle false
+[t0] > gamerule disableRaids true
+[t0] > worldborder set 500 30
+[t0] in the nether
+[t0] > time query day
+[t0] > execute store success score $main#t2 mcs.world if dimension minecraft:the_nether
+[t0] day=1 nether=False
+[t0] > fill 0 64 0 3 66 1 minecraft:stone
+[t0] > fill 0 64 0 3 66 1 minecraft:dirt replace minecraft:stone
+[t0] > clone 0 64 0 3 66 1 10 64 0
+[t0] > clone 0 64 0 3 66 1 0 67 0
+[t0] > clone 0 64 0 3 66 1 0 70 0
+[t0] > clone 0 64 0 3 66 1 0 64 5
+[t0] > clone 0 64 0 3 66 1 100 0 100
+[t0] > clone 0 64 0 3 66 1 20 64 0
+[t0] > clone 100 0 100 103 2 101 30 64 0 masked
+[t0] > clone 0 64 0 3 66 1 40 64 0 replace move
+[t0] > fill ~ ~ ~ ~2 ~ ~2 minecraft:air
+[t0] > particle minecraft:flame ~ ~ ~ 0 0 0 0 5
+[t0] > particle minecraft:end_rod 0 70 0 0.5 0.5 0.5 0.1 20
+[t0] > particle minecraft:dust{color:[1.0f,0.501961f,0.0f],scale:1.5f} ~ ~1 ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~2 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~-2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~-2 0 0 0 0 1
+[t0] > particle minecraft:crit 0 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 0.5 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 1 64 0 0 0 0 0 1
+[t0] > playsound minecraft:entity.experience_orb.pickup master @a ~ ~ ~ 1 2
+[t0] > stopsound @a
+[t0] > team modify blue prefix {"text":"[B] "}
+[t0] > team modify blue collisionRule never
+[t0] > team join red @a[name=Steve]
+[t0] > team join blue Alex
+[t0] members=0 has=False
+[t0] total=17 has=True
+[t0] > scoreboard objectives setdisplay sidebar kills
+=== format 48 ===
+[t0] > team add red {"text":"Red Team"}
+[t0] > team add blue
+[t0] > team modify red color red
+[t0] > team modify red friendlyFire false
+[t0] > time query daytime
+[t0] > time set 6000
+[t0] > weather rain
+[t0] > weather clear 600s
+[t0] > difficulty hard
+[t0] > gamerule keepInventory true
+[t0] > gamerule randomTickSpeed 5
+[t0] > gamerule doDaylightCycle false
+[t0] > gamerule disableRaids true
+[t0] > worldborder set 500 30
+[t0] in the nether
+[t0] > time query day
+[t0] > execute store success score $main#t2 mcs.world if dimension minecraft:the_nether
+[t0] day=1 nether=False
+[t0] > fill 0 64 0 3 66 1 minecraft:stone
+[t0] > fill 0 64 0 3 66 1 minecraft:dirt replace minecraft:stone
+[t0] > clone 0 64 0 3 66 1 10 64 0
+[t0] > clone 0 64 0 3 66 1 0 67 0
+[t0] > clone 0 64 0 3 66 1 0 70 0
+[t0] > clone 0 64 0 3 66 1 0 64 5
+[t0] > clone 0 64 0 3 66 1 100 0 100
+[t0] > clone 0 64 0 3 66 1 20 64 0
+[t0] > clone 100 0 100 103 2 101 30 64 0 masked
+[t0] > clone 0 64 0 3 66 1 40 64 0 replace move
+[t0] > fill ~ ~ ~ ~2 ~ ~2 minecraft:air
+[t0] > particle minecraft:flame ~ ~ ~ 0 0 0 0 5
+[t0] > particle minecraft:end_rod 0 70 0 0.5 0.5 0.5 0.1 20
+[t0] > particle minecraft:dust{color:[1.0f,0.501961f,0.0f],scale:1.5f} ~ ~1 ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~2 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~-2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~-2 0 0 0 0 1
+[t0] > particle minecraft:crit 0 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 0.5 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 1 64 0 0 0 0 0 1
+[t0] > playsound minecraft:entity.experience_orb.pickup master @a ~ ~ ~ 1 2
+[t0] > stopsound @a
+[t0] > team modify blue prefix {"text":"[B] "}
+[t0] > team modify blue collisionRule never
+[t0] > team join red @a[name=Steve]
+[t0] > team join blue Alex
+[t0] members=0 has=False
+[t0] total=17 has=True
+[t0] > scoreboard objectives setdisplay sidebar kills
+=== format 88 ===
+[t0] > team add red {"text":"Red Team"}
+[t0] > team add blue
+[t0] > team modify red color red
+[t0] > team modify red friendlyFire false
+[t0] > forceload add ~ ~
+[t0] > time query daytime
+[t0] > time set 6000
+[t0] > weather rain
+[t0] > weather clear 600s
+[t0] > difficulty hard
+[t0] > gamerule keepInventory true
+[t0] > gamerule randomTickSpeed 5
+[t0] > gamerule doDaylightCycle false
+[t0] > gamerule disableRaids true
+[t0] > worldborder set 500 30
+[t0] in the nether
+[t0] > time query day
+[t0] > execute store success score $main#t2 mcs.world if dimension minecraft:the_nether
+[t0] day=1 nether=False
+[t0] > fill 0 64 0 3 66 1 minecraft:stone
+[t0] > fill 0 64 0 3 66 1 minecraft:dirt replace minecraft:stone
+[t0] > clone 0 64 0 3 66 1 10 64 0
+[t0] > clone 0 64 0 3 66 1 0 67 0
+[t0] > clone 0 64 0 3 66 1 0 70 0
+[t0] > clone 0 64 0 3 66 1 0 64 5
+[t0] > clone 0 64 0 3 66 1 100 0 100
+[t0] > clone 0 64 0 3 66 1 20 64 0
+[t0] > clone 100 0 100 103 2 101 30 64 0 masked
+[t0] > clone 0 64 0 3 66 1 40 64 0 replace move
+[t0] > fill ~ ~ ~ ~2 ~ ~2 minecraft:air
+[t0] > particle minecraft:flame ~ ~ ~ 0 0 0 0 5
+[t0] > particle minecraft:end_rod 0 70 0 0.5 0.5 0.5 0.1 20
+[t0] > particle minecraft:dust{color:[1.0f,0.501961f,0.0f],scale:1.5f} ~ ~1 ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~2 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~-2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~-2 0 0 0 0 1
+[t0] > particle minecraft:crit 0 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 0.5 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 1 64 0 0 0 0 0 1
+[t0] > playsound minecraft:entity.experience_orb.pickup master @a ~ ~ ~ 1 2
+[t0] > stopsound @a
+[t0] > team modify blue prefix {"text":"[B] "}
+[t0] > team modify blue collisionRule never
+[t0] > team join red @a[name=Steve]
+[t0] > team join blue Alex
+[t0] members=0 has=False
+[t0] total=17 has=True
+[t0] > scoreboard objectives setdisplay sidebar kills
+=== format 94 ===
+[t0] > team add red {"text":"Red Team"}
+[t0] > team add blue
+[t0] > team modify red color red
+[t0] > team modify red friendlyFire false
+[t0] > forceload add ~ ~
+[t0] > time query daytime
+[t0] > time set 6000
+[t0] > weather rain
+[t0] > weather clear 600s
+[t0] > difficulty hard
+[t0] > gamerule keep_inventory true
+[t0] > gamerule random_tick_speed 5
+[t0] > gamerule advance_time false
+[t0] > gamerule raids false
+[t0] > worldborder set 500 30s
+[t0] in the nether
+[t0] > time query day
+[t0] > execute store success score $main#t2 mcs.world if dimension minecraft:the_nether
+[t0] day=1 nether=False
+[t0] > fill 0 64 0 3 66 1 minecraft:stone
+[t0] > fill 0 64 0 3 66 1 minecraft:dirt replace minecraft:stone
+[t0] > clone 0 64 0 3 66 1 10 64 0
+[t0] > clone 0 64 0 3 66 1 0 67 0
+[t0] > clone 0 64 0 3 66 1 0 70 0
+[t0] > clone 0 64 0 3 66 1 0 64 5
+[t0] > clone 0 64 0 3 66 1 100 0 100
+[t0] > clone 0 64 0 3 66 1 20 64 0
+[t0] > clone 100 0 100 103 2 101 30 64 0 masked
+[t0] > clone 0 64 0 3 66 1 40 64 0 replace move
+[t0] > fill ~ ~ ~ ~2 ~ ~2 minecraft:air
+[t0] > particle minecraft:flame ~ ~ ~ 0 0 0 0 5
+[t0] > particle minecraft:end_rod 0 70 0 0.5 0.5 0.5 0.1 20
+[t0] > particle minecraft:dust{color:[1.0f,0.501961f,0.0f],scale:1.5f} ~ ~1 ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~2 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~-2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~-2 0 0 0 0 1
+[t0] > particle minecraft:crit 0 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 0.5 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 1 64 0 0 0 0 0 1
+[t0] > playsound minecraft:entity.experience_orb.pickup master @a ~ ~ ~ 1 2
+[t0] > stopsound @a
+[t0] > team modify blue prefix {"text":"[B] "}
+[t0] > team modify blue collisionRule never
+[t0] > team join red @a[name=Steve]
+[t0] > team join blue Alex
+[t0] members=0 has=False
+[t0] total=17 has=True
+[t0] > scoreboard objectives setdisplay sidebar kills
+=== format 101 ===
+[t0] > team add red {"text":"Red Team"}
+[t0] > team add blue
+[t0] > team modify red color red
+[t0] > team modify red friendlyFire false
+[t0] > forceload add ~ ~
+[t0] > time query day
+[t0] > time set 6000
+[t0] > weather rain
+[t0] > weather clear 600s
+[t0] > difficulty hard
+[t0] > gamerule keep_inventory true
+[t0] > gamerule random_tick_speed 5
+[t0] > gamerule advance_time false
+[t0] > gamerule raids false
+[t0] > worldborder set 500 30s
+[t0] in the nether
+[t0] > time query time
+[t0] > execute store success score $main#t2 mcs.world if dimension minecraft:the_nether
+[t0] day=0 nether=False
+[t0] > fill 0 64 0 3 66 1 minecraft:stone
+[t0] > fill 0 64 0 3 66 1 minecraft:dirt replace minecraft:stone
+[t0] > clone 0 64 0 3 66 1 10 64 0
+[t0] > clone 0 64 0 3 66 1 0 67 0
+[t0] > clone 0 64 0 3 66 1 0 70 0
+[t0] > clone 0 64 0 3 66 1 0 64 5
+[t0] > clone 0 64 0 3 66 1 100 0 100
+[t0] > clone 0 64 0 3 66 1 20 64 0
+[t0] > clone 100 0 100 103 2 101 30 64 0 masked
+[t0] > clone 0 64 0 3 66 1 40 64 0 replace move
+[t0] > fill ~ ~ ~ ~2 ~ ~2 minecraft:air
+[t0] > particle minecraft:flame ~ ~ ~ 0 0 0 0 5
+[t0] > particle minecraft:end_rod 0 70 0 0.5 0.5 0.5 0.1 20
+[t0] > particle minecraft:dust{color:[1.0f,0.501961f,0.0f],scale:1.5f} ~ ~1 ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~2 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~-2 ~ ~ 0 0 0 0 1
+[t0] > particle minecraft:happy_villager ~ ~ ~-2 0 0 0 0 1
+[t0] > particle minecraft:crit 0 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 0.5 64 0 0 0 0 0 1
+[t0] > particle minecraft:crit 1 64 0 0 0 0 0 1
+[t0] > playsound minecraft:entity.experience_orb.pickup master @a ~ ~ ~ 1 2
+[t0] > stopsound @a
+[t0] > team modify blue prefix {"text":"[B] "}
+[t0] > team modify blue collisionRule never
+[t0] > team join red @a[name=Steve]
+[t0] > team join blue Alex
+[t0] members=0 has=False
+[t0] total=17 has=True
+[t0] > scoreboard objectives setdisplay sidebar kills

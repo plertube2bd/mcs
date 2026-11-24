@@ -1,0 +1,55 @@
+// Classes, generics, runtime strings / arrays and the world libraries (the examples from docs/language.md).
+use System.Numerics;
+use NbtLib;
+use WorldLib;
+use TeamLib;
+use TuiLib;
+
+class Vec {
+    public int X, Y;
+    public Vec(int x, int y) { X = x; Y = y; }
+    public int Len2() => X * X + Y * Y;
+    public void Add(Vec o) { X += o.X; Y += o.Y; }
+    public override string ToString() => $"({X}, {Y})";
+}
+
+class Box<T> where T : INumber<T> {
+    public T Value;
+    public Box(T v) { Value = v; }
+    public T Twice() => Value + Value;
+}
+
+static T Max<T>(T a, T b) where T : INumber<T> => a > b ? a : b;
+
+static Vec origin = new Vec(0, 0);
+static Team red = new Team("red", "Red Team") { Color = Color.Red };
+static Objective kills = new Objective("kills", "playerKillCount", "Kills");
+
+[MinecraftDivision] static int Cell(int x) => x / 16;
+
+public static void Main() {
+    var a = new Vec(3, 4);
+    Vec b = a;
+    b.X = 10;
+    a.Add(new Vec(1, 1));
+    m.Console.WriteLine($"{a} {a.Len2()} origin={origin}");
+    m.Console.WriteLine($"{Max(3, 9)} {Max(1.5f, -2f)} {new Box<Q16>(0.25).Twice()} cell={Cell(-1)}");
+
+#if MC_1_20_2_OR_GREATER
+    NString name = "Steve";
+    int hp = 17;
+    NString line = $"{name} has {hp} HP";
+    line += "!";
+    if (line.StartsWith("Steve")) m.Console.WriteLine(line);
+#endif
+
+    var scores = new NArray<int> { 4, 9 };
+    scores.Add(17);
+    int best = 0;
+    foreach (int s in scores) if (s > best) best = s;
+    m.Console.WriteLine($"{scores} best={best} n={scores.Length}");
+
+    Storage.Set("example.best", best);
+    kills["#best"] = Storage.Get<int>("example.best");
+    if (World.IsIn(Dimension.Overworld)) m.Console.WriteLine($"day {World.Day()}, best kills {kills["#best"]}");
+}

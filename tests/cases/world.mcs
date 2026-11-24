@@ -1,0 +1,62 @@
+// WorldLib, regions, particles, sounds, teams and objectives (the simulator prints world commands as "> …").
+// @mc 1.20.2-26.3
+// @real load               (blocks, weather and time: the simulator has no world)
+use WorldLib;
+use BlockLib;
+use ParticleLib;
+use SoundLib;
+use TeamLib;
+use TuiLib;
+
+static Team red = new Team("red", "Red Team") { Color = Color.Red, FriendlyFire = false };
+static Objective kills = new Objective("kills", "playerKillCount", "Kills");
+
+public static void Main() {
+    int t = World.Time();
+    World.SetTime(6000);
+    World.Weather = Weather.Rain;
+    World.SetWeather(Weather.Clear, 600);
+    World.Difficulty = Difficulty.Hard;
+    World.GameRule("keepInventory", true);
+    World.GameRule("randomTickSpeed", 5);
+    World.GameRule("doDaylightCycle", false);
+    World.GameRule("raids", false);          // new name: disableRaids true before 1.21.11
+    World.SetBorder(500, 30);
+    World.Run(Dimension.Nether, () => m.Console.WriteLine("in the nether"));
+    m.Console.WriteLine($"day={World.Day()} nether={World.IsIn(Dimension.Nether)}");
+
+    var r = new Region(new Position(0, 64, 0), new Position(3, 66, 1));
+    r.Fill("minecraft:stone");
+    r.Replace("minecraft:stone", "minecraft:dirt");
+    r.Clone(new Position(10, 64, 0));
+    r.Stack(Direction.Up, 2);
+    r.Stack(0, 0, 5, 1);
+    Clipboard live = r.Copy();
+    Clipboard snap = r.Copy(new Position(100, 0, 100));
+    live.Paste(new Position(20, 64, 0));
+    snap.Paste(new Position(30, 64, 0), true);
+    r.Move(new Position(40, 64, 0));
+    var here = new Region(Position.Here, Position.Here.Offset(2, 0, 2));
+    here.Clear();
+
+    Particle.Spawn("flame", Position.Here, 5);
+    Particle.Spawn("end_rod", new Position(0, 70, 0), 0.5, 0.5, 0.5, 20, 0.1);
+    Particle.Dust(0xFF8000, Position.Here.Offset(0, 1, 0), 1.5f);
+    Particle.Circle("happy_villager", Position.Here, 2, 4);
+    Particle.Line("crit", new Position(0, 64, 0), new Position(1, 64, 0), 0.5);
+
+    Sound.Play("entity.experience_orb.pickup", Position.Here, 1, 2);
+    Sound.PlayTo(PlayerLib.Player.All, "block.note_block.bell", 0.5f, 1, SoundSource.Record);
+    Sound.Stop(PlayerLib.Player.All);
+
+    var blue = new Team("blue") { Prefix = "[B] ", Collision = Collision.Never };
+    red.Join(PlayerLib.Player.Named("Steve"));
+    blue.Join("Alex");
+    m.Console.WriteLine($"members={red.Count} has={red.Has(PlayerLib.Player.Self)}");
+    kills["#total"] = 10;
+    kills["#total"] += 5;
+    kills.Add("#total", 2);
+    m.Console.WriteLine($"total={kills["#total"]} has={kills.Has("#total")}");
+    kills.Show();
+    kills.Reset("#total");
+}

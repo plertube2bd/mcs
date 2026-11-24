@@ -1,0 +1,4 @@
+[t0] max int=9 milli=1.500 q16=0.25000
+[t0] sum=6 sumf=1.750
+[t0] bi=42 bf=2.500
+[t0] pair=5,True

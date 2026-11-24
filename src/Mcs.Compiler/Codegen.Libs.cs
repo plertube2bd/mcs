@@ -36,6 +36,7 @@ sealed class BlockVar(string id) : Var
 {
     public string Id = id;                                    // minecraft:oak_stairs (resolved for this version)
     public Dictionary<string, string> States = new();         // facing=north
+    public Pos? Mounted;                                      // m.MountBlock: the block at this position
     public override string ToString() => States.Count == 0 ? Id : $"{Id}[{string.Join(",", States.Select(kv => $"{kv.Key}={kv.Value}"))}]";
 }
 
@@ -142,6 +143,7 @@ public sealed partial class Codegen
             };
         if (kind == VK.Ref && EvalRefExpr(e) is RefVar rr) return rr;
         var sym = cur.Model.GetSymbolInfo(e).Symbol;
+        if (kind == VK.Ref && WorldRef(e, sym) is RefVar wr) return wr;
         switch (Intrinsic(sym))
         {
             case "player.all": return new RefVar("@a");
@@ -235,6 +237,7 @@ public sealed partial class Codegen
         var cv = cur.Model.GetConstantValue(value);
         switch (v)
         {
+            case TeamVar tv: cur.Sink.AddRange(TeamModify(tv, p, value, cur.Model)); return;
             case GuiVar gv: EmitGuiSet(gv, p, value); return;
             case ItemVar iv:
                 if (!cv.HasValue) throw new UnsupportedException(value, $"{p.Name} must be a compile-time constant.");
@@ -252,6 +255,7 @@ public sealed partial class Codegen
                 else throw new UnsupportedException(value, "Block states must be compile-time constants.");
                 CheckState(bv, name, val, value);
                 bv.States[name] = val;
+                if (bv.Mounted != null) EmitMountedBlockSet(bv, name, val);
                 return;
             }
             case StyleVar sv:
@@ -281,8 +285,9 @@ public sealed partial class Codegen
     {
         if (target == null && (cur.This == null || Kind(p.ContainingType) != VK.Ref)) return false;
         var k = target == null ? VK.Ref : Kind(cur.Model.GetTypeInfo(target.Expression).Type);
-        if (k is VK.Block or VK.Button or VK.Text or VK.Gui or VK.Item)
+        if (k is VK.Block or VK.Button or VK.Text or VK.Gui or VK.Item or VK.Team)
         {
+            if (k == VK.Team) { if (!a.IsKind(SyntaxKind.SimpleAssignmentExpression)) throw new UnsupportedException(a, "Only '=' is supported here."); SetObjProp(EvalCtObj(target!.Expression), p, a.Right); return true; }
             if (!a.IsKind(SyntaxKind.SimpleAssignmentExpression)) throw new UnsupportedException(a, "Only '=' is supported here.");
             SetObjProp(EvalLibObject(target.Expression, k), p, a.Right);
             return true;
@@ -305,6 +310,8 @@ public sealed partial class Codegen
     Operand? TryLibPropertyGet(IPropertySymbol p, MemberAccessExpressionSyntax? ma, VK kind)
     {
         if (Kind(p.ContainingType) == VK.Gui) return GuiGet(p, ma);
+        if (WorldPropGet(p, ma) is Operand wp) return wp;
+        if (Kind(p.ContainingType) == VK.Block && ma != null && !p.IsStatic) return BlockGet(p, ma);
         if (Kind(p.ContainingType) != VK.Ref) return null;
         var pl = ma == null ? Resolve(ThisRef(cur.Info.Decl)) : GetRef(ma.Expression);
         string t = Temp();
