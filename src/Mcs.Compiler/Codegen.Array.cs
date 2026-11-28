@@ -65,7 +65,7 @@ public sealed partial class Codegen
         var elem = ElemKind(f.Type);
         var init = v.Initializer?.Value;
         var (size, items) = init == null ? (null, null) : ArrayInit(init);
-        string cls = f.ContainingType.Name == Preprocessor.GlobalClass ? "" : Snake(f.ContainingType.Name) + ".";
+        string cls = StaticPrefix(f);
         try
         {
             if (size == null && items == null)

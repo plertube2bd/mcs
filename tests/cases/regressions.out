@@ -1,0 +1,125 @@
+=== format 15 ===
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r0"],data:{a:{b:1}}}
+[t0] > data merge entity @e[tag=mcs.regressions.r0,limit=1] {data:{c:{d:2}}}
+[t0] put [3, 4]
+[t0] drop [4]
+[t0] twice [4, 5, 5]
+[t0] helper [4, 5, 5, 7]
+[t0] nested [1]
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r1"]}
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r2"]}
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] unset reads 0
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] unset compares True False True True True prod=0
+[t0] milli 6000.000 2209.000 1000.000 6000.000 -4500.000 3000.000
+[t0] [Server] 0.37 0.15 true 0.74
+[t0] [Server] step 0.25
+[t0] [Server] step 0.5
+[t0] statics 0 11 2
+=== format 48 ===
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r0"],data:{a:{b:1}}}
+[t0] > data merge entity @e[tag=mcs.regressions.r0,limit=1] {data:{c:{d:2}}}
+[t0] put [3, 4]
+[t0] drop [4]
+[t0] twice [4, 5, 5]
+[t0] helper [4, 5, 5, 7]
+[t0] nested [1]
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r1"]}
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r2"]}
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] unset reads 0
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] unset compares True False True True True prod=0
+[t0] milli 6000.000 2209.000 1000.000 6000.000 -4500.000 3000.000
+[t0] [Server] 0.37 0.15 true 0.74
+[t0] [Server] step 0.25
+[t0] [Server] step 0.5
+[t0] statics 0 11 2
+=== format 88 ===
+[t0] > forceload add ~ ~
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r0"],data:{a:{b:1}}}
+[t0] > data merge entity @e[tag=mcs.regressions.r0,limit=1] {data:{c:{d:2}}}
+[t0] put [3, 4]
+[t0] drop [4]
+[t0] twice [4, 5, 5]
+[t0] helper [4, 5, 5, 7]
+[t0] nested [1]
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r1"]}
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r2"]}
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] unset reads 0
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] unset compares True False True True True prod=0
+[t0] milli 6000.000 2209.000 1000.000 6000.000 -4500.000 3000.000
+[t0] [Server] 0.37 0.15 true 0.74
+[t0] [Server] step 0.25
+[t0] [Server] step 0.5
+[t0] statics 0 11 2
+=== format 101 ===
+[t0] [mcsRuntimeServices] Warn: There is not MC# Runtime Server Mod. Performance may be reduced, but there are no issues with the datapack.
+[t0] > forceload add ~ ~
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r0"],data:{a:{b:1}}}
+[t0] > data merge entity @e[tag=mcs.regressions.r0,limit=1] {data:{c:{d:2}}}
+[t0] put [3, 4]
+[t0] drop [4]
+[t0] twice [4, 5, 5]
+[t0] helper [4, 5, 5, 7]
+[t0] nested [1]
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r1"]}
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r2"]}
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] unset reads 0
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] unset compares True False True True True prod=0
+[t0] milli 6000.000 2209.000 1000.000 6000.000 -4500.000 3000.000
+[t0] [Server] 0.37 0.15 true 0.74
+[t0] [Server] step 0.25
+[t0] [Server] step 0.5
+[t0] statics 0 11 2
+=== format 121 ===
+[t0] [mcsRuntimeServices] Warn: There is not MC# Runtime Server Mod. Performance may be reduced, but there are no issues with the datapack.
+[t0] > forceload add ~ ~
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r0"],data:{a:{b:1}}}
+[t0] > data merge entity @e[tag=mcs.regressions.r0,limit=1] {data:{c:{d:2}}}
+[t0] put [3, 4]
+[t0] drop [4]
+[t0] twice [4, 5, 5]
+[t0] helper [4, 5, 5, 7]
+[t0] nested [1]
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r1"]}
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["rg.m","mcs.regressions.r2"]}
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] unset reads 0
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] ! No score for @e[tag=mcs.regressions.r2,limit=1] in rg.hp  ← scoreboard players get @e[tag=mcs.regressions.r2,limit=1] rg.hp
+[t0] unset compares True False True True True prod=0
+[t0] milli 6000.000 2209.000 1000.000 6000.000 -4500.000 3000.000
+[t0] [Server] 0.37 0.15 true 0.74
+[t0] [Server] step 0.25
+[t0] [Server] step 0.5
+[t0] statics 0 11 2

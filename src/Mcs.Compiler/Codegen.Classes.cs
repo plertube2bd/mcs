@@ -38,6 +38,8 @@ public sealed partial class Codegen
         && n.Name != Preprocessor.GlobalClass && !IsDummyClass(n) && ClassOf(n) == null
         && n.DeclaringSyntaxReferences.Length > 0 && n.DeclaringSyntaxReferences.All(r => !r.SyntaxTree.FilePath.StartsWith('<'));
 
+    static bool IsNArrType(ITypeSymbol? t) => t is INamedTypeSymbol { Name: "NArray" } n && n.ContainingNamespace?.Name == "MCS";
+
     static bool IsTemplate(IMethodSymbol def)
     {
         if (def.IsGenericMethod) return true;
@@ -543,7 +545,11 @@ public sealed partial class Codegen
             InvocationExpressionSyntax i => model.GetSymbolInfo(i).Symbol is IMethodSymbol { IsStatic: false } im && IsUserClass(im.ContainingType)
                 && (i.Expression is IdentifierNameSyntax || i.Expression is MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax or BaseExpressionSyntax }
                     || i.Expression is MemberAccessExpressionSyntax mx && IsMine(mx.Expression))
-                || i.ArgumentList.Arguments.Any(x => x.Expression is ThisExpressionSyntax),
+                // Items.Add(x), Items.RemoveAt(0), …: NArray methods change the array in place
+                || i.Expression is MemberAccessExpressionSyntax na && IsMine(na.Expression) && IsNArrType(model.GetTypeInfo(na.Expression).Type)
+                // this, or a field holding an object / NArray, passed to another method (which may change it)
+                || i.ArgumentList.Arguments.Any(x => x.Expression is ThisExpressionSyntax
+                    || IsMine(x.Expression) && model.GetTypeInfo(x.Expression).Type is var at && (IsNArrType(at) || IsUserClass(at))),
             _ => false,
         });
         mutatesThis[f] = any;
@@ -595,7 +601,7 @@ public sealed partial class Codegen
     // ================================================================ static objects
     void DeclareObjStatic(SemanticModel model, IFieldSymbol f, VariableDeclaratorSyntax v)
     {
-        string cls = f.ContainingType.Name == Preprocessor.GlobalClass ? "" : Snake(f.ContainingType.Name) + ".";
+        string cls = StaticPrefix(f);
         try
         {
             var t = (INamedTypeSymbol)f.Type;

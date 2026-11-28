@@ -38,12 +38,35 @@ public sealed record TargetProfile(McVersion First, McVersion Last)
     public bool WorldBorderTime => Format >= 94;
     /// World clocks (26.1+): time of day = "time query day" (the day timeline), days = "time query time" / 24000
     public bool Timelines => Format >= 101;
+    /// First pack format the MC# runtime mod (mcs.jar) exists for (26.1)
+    public const int RuntimeFormat = 101;
+    /// The MC# runtime mod can be installed (26.1+)
+    public bool RuntimeMod => Format >= RuntimeFormat;
     /// Scoreboard display slot: belowName (≤1.20.1) → below_name (1.20.2+)
     public string BelowNameSlot => Format >= 18 ? "below_name" : "belowName";
 
     /// #if symbols: MC_<v>_OR_GREATER for the first version of each group up to and including this one
-    public IEnumerable<string> Symbols => Versions.Groups.TakeWhile(g => g.Format <= Format).Select(g => g.First.Symbol);
+    public IEnumerable<string> Symbols => Versions.Groups.TakeWhile(g => g.Format <= Format).Select(g => g.First.Symbol).Concat(Language.Symbols);
 
+}
+
+/// <summary>The MC# language version this compiler implements (docs/ko/spec.md). The single source of truth.</summary>
+public static class Language
+{
+    public const int Major = 1, Minor = 0;
+    public static string Version => $"{Major}.{Minor}";
+    /// #if symbols: MCS_<major>_<minor>_OR_GREATER for every language version up to this one
+    public static IEnumerable<string> Symbols => new[] { "MCS_1_0_OR_GREATER" };
+
+    /// "language" in mcs.json / --language: the version a project needs. Newer than this compiler is an error.
+    public static void Require(string spec)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(spec.Trim(), @"^(\d+)\.(\d+)$");
+        if (!m.Success) throw new CompileException($"Invalid language version '{spec}' (expected e.g. \"{Version}\").");
+        int major = int.Parse(m.Groups[1].Value), minor = int.Parse(m.Groups[2].Value);
+        if (major > Major || major == Major && minor > Minor)
+            throw new CompileException($"This project needs MC# {major}.{minor}, but this compiler implements MC# {Version}. Update the compiler.");
+    }
 }
 
 public static class Versions

@@ -1,0 +1,20 @@
+// 튜토리얼 2: 변수의 수명과 /reload
+// @do 1 reload
+// @do 2 reload
+
+static int loads = 0;              // 월드에 처음 설치될 때 한 번만 0이 들어간다
+static int energy;                 // [Load]에서 매번 다시 넣는다
+
+[Load] static void Init()
+{
+    energy = 100;
+}
+
+public static void Main()
+{
+    loads++;
+    energy -= 10;
+    int local = 0;                 // 지역 변수: 선언이 실행될 때마다 0
+    local++;
+    m.Console.WriteLine($"loads={loads} energy={energy} local={local}");
+}

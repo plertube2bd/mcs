@@ -1,0 +1,26 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+
+[[mods]]
+modId="mcs"
+version="${version}"
+displayName="MC# Runtime"
+description='''
+Runtime services for MC# datapacks: fast paths, permission level 3-4 commands from functions,
+/<namespace>:<function> shortcuts, a debugger (/mcs) and an interpreter (/mcsi).
+'''
+
+[[dependencies.mcs]]
+    modId="neoforge"
+    type="required"
+    versionRange="[26.1,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.mcs]]
+    modId="minecraft"
+    type="required"
+    versionRange="[26.1,26.4)"
+    ordering="NONE"
+    side="BOTH"

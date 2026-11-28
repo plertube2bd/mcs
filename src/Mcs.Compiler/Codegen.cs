@@ -14,7 +14,8 @@ public sealed record Diag(string File, int Line, int Col, string Message, bool W
 }
 
 /// Project-wide options (mcs.json / command line).
-public sealed record CompileOptions(bool MinecraftDivision = false);
+public enum RuntimeMode { Off, Optional, Required }
+public sealed record CompileOptions(bool MinecraftDivision = false, RuntimeMode Runtime = RuntimeMode.Optional);
 
 sealed class UnsupportedException(SyntaxNode node, string message) : Exception(message)
 {
@@ -104,6 +105,18 @@ public sealed partial class Codegen
     /// Scale factor for "execute store result ... <scale>" (score → NBT value).
     static string InvScale(VK k) => k switch { VK.Fixed => "0.001", VK.Double => "0.0000152587890625", _ => "1" };
     /// Formats a scaled constant as a plain number ("1.5").
+    /// A C# constant as a compile-time number of kind k, keeping its exact text for commands (0.15, not 0.1499939).
+    static ConstVar ConstOf(object? v, VK k) => new(ScaleConst(v, k), k,
+        IsFrac(k) && v is float or double ? ((IFormattable)v).ToString(null, CultureInfo.InvariantCulture) : null);
+
+    /// How a compile-time number is written into a command: integers as is, Milli / Q16 as decimals.
+    internal static string FormatConst(int v, VK k) => k switch
+    {
+        VK.Bool => v != 0 ? "true" : "false",
+        VK.Fixed or VK.Double => FmtScaled(v, k),
+        _ => v.ToString(CultureInfo.InvariantCulture),
+    };
+
     static string FmtScaled(int v, VK k) => k switch
     {
         VK.Fixed => (v / (double)Scale).ToString("0.###", CultureInfo.InvariantCulture),
@@ -230,6 +243,8 @@ public sealed partial class Codegen
         pack.Functions[$"{ns}:__load"] = load;
         pack.LoadTag.Add($"{ns}:__load");
         foreach (var f in fns.Values.Where(f => HasAttr(f.Sym, "TickAttribute"))) pack.TickTag.Add(f.Path);
+        FinishRuntime(load);
+        FinishSymbols();
         return pack;
     }
 
@@ -256,7 +271,7 @@ public sealed partial class Codegen
         if (k == VK.Team) { DeclareTeamStatic(model, f, v); return; }
         if (k is VK.Entity or VK.Ref or VK.Block) { Error(v, $"Static {f.Type.Name} fields must be bound to the world with m.MountEntity / m.MountBlock (or use a local variable)."); return; }
         if (k is not (VK.Int or VK.Bool or VK.Fixed or VK.Double)) { Error(v, $"Unsupported static field type: {f.Type} (int, bool, Milli, Q16, classes, NString, NArray, Team, Objective are supported)"); return; }
-        string cls = f.ContainingType.Name == Preprocessor.GlobalClass ? "" : Snake(f.ContainingType.Name) + ".";
+        string cls = StaticPrefix(f);
         var sv = new ScoreVar(H($"$static.{cls}{f.Name}"), k);
         statics[f] = sv;
         int init = 0;
@@ -312,6 +327,8 @@ public sealed partial class Codegen
         cur.Sink.InsertRange(0, cur.EntryResets);
         if (cur.UsesCtl) cur.Sink.Insert(0, $"scoreboard players set {info.Ctl} 0");
         pack.Functions[info.Path] = cur.Sink;
+        fnLocals[info] = cur.Locals.Where(kv => kv.Key is ILocalSymbol && kv.Value is ScoreVar)
+            .Select(kv => (kv.Key.Name, (ScoreVar)kv.Value)).ToList();
     }
 
     /// k: continuation function to call after the last statement (set inside code that contains Wait()).
@@ -853,13 +870,23 @@ public sealed partial class Codegen
     void SetHolder(string h, Operand op)
     {
         if (op is ConstOp c) Emit($"scoreboard players set {h} {c.Value}");
-        else if (op is ScoreOp s && s.Holder != h) Emit($"scoreboard players operation {h} = {s.Holder}");
+        else if (op is ScoreOp s && s.Holder != h)
+            Emit(MayBeUnset(s.Holder)
+                // a score the compiler does not own (an entity's, a player's, a mounted one) may have no value yet:
+                // `operation =` would then fail and keep the old value; `store result … get` stores 0
+                ? $"execute store result score {h} run scoreboard players get {s.Holder}"
+                : $"scoreboard players operation {h} = {s.Holder}");
     }
+
+    /// Holders the compiler writes itself ($locals, $static…, #constants) always have a value before they are read.
+    static bool MayBeUnset(string holder) => !(holder.StartsWith('$') || System.Text.RegularExpressions.Regex.IsMatch(holder, @"^#-?\d+ "));
 
     string ConstHolder(int c) { consts.Add(c); return H($"#{c}"); }
 
     void ApplyOp(string h, char op, Operand r, VK kind)
     {
+        // += / -= of a score that has no value fail and change nothing (= adding 0); * / % must see the 0
+        if (op is not ('+' or '-') && r is ScoreOp ur && MayBeUnset(ur.Holder)) r = new ScoreOp(ToTemp(r));
         switch (op)
         {
             case '+' or '-':
@@ -880,12 +907,19 @@ public sealed partial class Codegen
                 if (r is ConstOp dd && dd.Value != 0 && dd.Value % DScale == 0) TruncOp(h, '/', new ConstOp(dd.Value / DScale));
                 else CallMath2("ddiv", h, r);
                 break;
+            case '*' when kind == VK.Fixed:
+                // Milli × Milli: a·b/1000 overflows 32 bits long before the result does, so split (__math/mmul)
+                if (r is ConstOp fm && fm.Value % Scale == 0) Emit($"scoreboard players operation {h} *= {ConstHolder(fm.Value / Scale)}");
+                else CallMath2("mmul", h, r);
+                break;
+            case '/' when kind == VK.Fixed:
+                if (r is ConstOp fd && fd.Value != 0 && fd.Value % Scale == 0) TruncOp(h, '/', new ConstOp(fd.Value / Scale));
+                else CallMath2("mdiv", h, r);
+                break;
             case '*':
                 Emit($"scoreboard players operation {h} *= {Holder(r)}");
-                if (kind == VK.Fixed) Emit($"scoreboard players operation {h} /= {ConstHolder(Scale)}");
                 break;
             case '/':
-                if (kind == VK.Fixed) Emit($"scoreboard players operation {h} *= {ConstHolder(Scale)}");
                 TruncOp(h, '/', r);
                 break;
             case '%':
@@ -1147,6 +1181,9 @@ public sealed partial class Codegen
         var L = EvalNum(b.Left, k);
         if (L is ScoreOp && !IsPure(b.Right)) L = new ScoreOp(ToTemp(L));
         var R = EvalNum(b.Right, k);
+        // `if score` on a score with no value is false for every comparison; read it as 0 like everywhere else
+        if (L is ScoreOp ul && MayBeUnset(ul.Holder)) L = new ScoreOp(ToTemp(L));
+        if (R is ScoreOp ur && MayBeUnset(ur.Holder)) R = new ScoreOp(ToTemp(R));
         string op = b.OperatorToken.Text;
         if (L is ConstOp && R is ScoreOp)
         {
@@ -1382,6 +1419,9 @@ public sealed partial class Codegen
             }
         }
         if (name.StartsWith("math.")) return EmitMath(name, inv);
+        if (name == "xc.run") return EmitExecuteChain(inv);
+        if (name.StartsWith("rt.")) return EmitRuntimeIntrinsic(name, inv);
+        if (name.StartsWith("xc.")) throw new UnsupportedException(inv, "An Execute chain must end with .Run(...): Execute.As(p).Run(() => { ... }).");
         if (name == "item.give") return EmitGive(inv);
         if (name == "obj.dispose") { EmitDispose(inv); return null; }
         if (name == "obj.clone") throw new UnsupportedException(inv, "Clone() makes a new object: assign it to a variable or pass it directly (m.GiveObject(wand.Clone(), p)).");
@@ -1715,6 +1755,22 @@ public sealed partial class Codegen
         string name = m.MethodKind == MethodKind.Constructor ? "ctor" : Snake(m.Name);
         if (m.IsGenericMethod) name += string.Concat(m.TypeArguments.Select(a => "_" + TypeKey(a)));
         return m.ContainingType.Name == Preprocessor.GlobalClass ? name : TypeKey(m.ContainingType) + "." + name;
+    }
+
+    /// <summary>
+    /// The part of a static field's score name before the field name: every namespace and containing class,
+    /// outermost first (<c>Lamps.State.lit</c> → <c>lamps.state.</c>), so fields of equally named nested classes
+    /// never share a score. Top-level fields (the implicit global class) have no prefix.
+    /// </summary>
+    static string StaticPrefix(IFieldSymbol f)
+    {
+        var parts = new List<string>();
+        for (var t = f.ContainingType; t != null; t = t.ContainingType)
+            if (t.Name != Preprocessor.GlobalClass)
+                parts.Insert(0, Snake(t.Name) + string.Concat(t.TypeArguments.Select(a => "_" + Snake(a.Name))));
+        for (var n = f.ContainingType.ContainingNamespace; n is { IsGlobalNamespace: false }; n = n.ContainingNamespace)
+            parts.Insert(0, Snake(n.Name));
+        return string.Concat(parts.Select(p => p + "."));
     }
 
     public static string Snake(string s)

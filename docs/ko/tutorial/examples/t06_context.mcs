@@ -1,0 +1,18 @@
+// 튜토리얼 6: 누가, 어디서 실행하는가
+// @do 1 join Steve
+use PlayerLib;
+use SoundLib;
+
+[OnJoin] static void Hello(Player p)
+{
+    p.SendMessage("어서 와!");                              // 이 플레이어(@s)에게만
+    Sound.PlayTo(Player.Self, "entity.player.levelup");     // 이 플레이어 위치에서, 이 플레이어만 듣는다
+    Sound.Play("block.bell.use", GetWorldSpawn());          // 월드 스폰에서, 근처 모두가 듣는다
+    Later();
+}
+
+static void Later()
+{
+    Wait(20);                                               // 1초 뒤: 서버가 월드 스폰에서 실행
+    Sound.PlayTo(Player.All, "block.note_block.bell");      // Player.Self는 여기서 의미가 없다
+}

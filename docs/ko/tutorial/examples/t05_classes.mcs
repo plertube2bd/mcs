@@ -1,0 +1,27 @@
+// 튜토리얼 5: 클래스, 참조, NArray 필드
+class Bag
+{
+    public NArray<int> Items = new NArray<int>();
+    public int Limit;
+    public Bag(int limit) { Limit = limit; }
+
+    public bool Put(int item)
+    {
+        if (Items.Length >= Limit) return false;
+        Items.Add(item);
+        return true;
+    }
+}
+
+public static void Main()
+{
+    var bag = new Bag(2);
+    bool a = bag.Put(10);
+    bool b = bag.Put(20);
+    bool c = bag.Put(30);                       // 가득 참
+    m.Console.WriteLine($"{a} {b} {c} -> {bag.Items}");
+
+    Bag same = bag;                             // 같은 객체
+    same.Items.RemoveAt(0);
+    m.Console.WriteLine($"bag={bag.Items} same={same.Items}");
+}

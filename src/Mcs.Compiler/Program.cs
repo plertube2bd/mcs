@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -8,13 +8,17 @@ namespace Mcs.Compiler;
 public static class Program
 {
     const string Usage = """
-        MC# compiler
+        MC# compiler (MC# {LANG})
 
           mcs build [mcs.json]                         Build according to the project file
           mcs <file.mcs ...> [options]                 Build the given files directly
+          mcs run [mcs.json | file.mcs ...] [options]  Build, then run the pack in the simulator (no Minecraft)
 
         options:
           --mc <version|min-max>   Target Minecraft version (default: 1.20.1-26.3)
+          --runtime <mode>         MC# runtime mod (mcs.jar, Minecraft 26.1+): optional (default: faster paths when
+                                   the mod is installed, a one-time warning when not), required (the pack only starts
+                                   with the mod; enables Runtime.Sudo) or off
           --division <mode>        csharp (default: / rounds toward zero) or minecraft (one scoreboard
                                    operation, rounds toward −∞ — faster)
                                    e.g. --mc 1.21.4, --mc 1.20.2-1.21.11
@@ -24,11 +28,21 @@ public static class Program
           --emit-csharp            Print the preprocessed C# source (for debugging)
           --check                  Only report errors; write nothing (used by editors)
           --stdin <file>           Read the text of <file> from standard input (unsaved editor buffers)
+          --language <x.y>         MC# language version the project needs (error if newer than this compiler)
+          --version                Print the MC# language and compiler version
           --versions               List supported versions and #if symbols
+          --api-docs               Print the API reference (docs/api.md) generated from the built-in declarations
+
+        mcs run options (simulator):
+          --ticks <n>              Ticks to simulate after load (default: until nothing is scheduled;
+                                   20 when there are [Tick] methods)
+          --do "<tick> <action>"   Scripted player action, repeatable: "0 join Steve", "5 die Steve",
+                                   "3 trigger Steve menu set 2", "4 click Steve" (see docs/compiling.md)
+          --format <n>             Pack format to simulate (default: the newest layer)
 
         mcs.json:
           { "namespace": "hello", "sources": ["src/*.mcs"], "output": "out/hello", "minecraft": "1.20.1-26.3", "resources": "res",
-            "division": "csharp" }
+            "division": "csharp", "runtime": "optional", "language": "{LANG}" }
         """;
 
     public static int Main(string[] argv)
@@ -40,16 +54,25 @@ public static class Program
     static int Run(string[] argv)
     {
         var files = new List<string>();
-        string? outDir = null, ns = null, mc = null, res = null, desc = null, division = null;
+        string? outDir = null, ns = null, mc = null, res = null, desc = null, division = null, runtime = null, language = null;
         bool emitCs = false, check = false;
         string? stdinFile = null;
+        bool simulate = false;
+        var simArgs = new List<string>();
+
+        if (argv.Length > 0 && argv[0] == "run")
+        {
+            simulate = true;
+            argv = argv[1..];
+            if (!argv.Any(a => a.EndsWith(".mcs", StringComparison.OrdinalIgnoreCase))) argv = ["build", .. argv];   // a project
+        }
 
         if (argv.Length > 0 && argv[0] == "build")
         {
             bool explicitFile = argv.Length > 1 && !argv[1].StartsWith('-');
             var proj = Project.Load(explicitFile ? argv[1] : "mcs.json");
             files.AddRange(proj.Files);
-            ns = proj.Namespace; outDir = proj.Output; mc = proj.Minecraft; res = proj.Resources; desc = proj.Description; division = proj.Division;
+            ns = proj.Namespace; outDir = proj.Output; mc = proj.Minecraft; res = proj.Resources; desc = proj.Description; division = proj.Division; runtime = proj.Runtime; language = proj.Language;
             argv = argv.Skip(explicitFile ? 2 : 1).ToArray(); // CLI options override the project file
         }
 
@@ -62,18 +85,24 @@ public static class Program
                 case "-n" or "--namespace": ns = Next(); break;
                 case "--mc": mc = Next(); break;
                 case "--division": division = Next(); break;
+                case "--runtime": runtime = Next(); break;
+                case "--language": language = Next(); break;
+                case "--version": Console.WriteLine($"MC# {Language.Version} (mcs {typeof(Program).Assembly.GetName().Version?.ToString(3)})"); return 0;
                 case "-r" or "--resources": res = Next(); break;
                 case "--emit-csharp": emitCs = true; break;
                 case "--check": check = true; break;
                 case "--stdin": stdinFile = Next(); break;
                 case "--versions": PrintVersions(); return 0;
-                case "-h" or "--help": Console.WriteLine(Usage); return 0;
+                case "--api-docs": Console.Write(ApiDocs.Generate()); return 0;
+                case "--ticks" or "--do" or "--format" when simulate: simArgs.Add(argv[i]); simArgs.Add(Next()); break;
+                case "-h" or "--help": Console.WriteLine(Usage.Replace("{LANG}", Language.Version)); return 0;
                 default:
                     if (argv[i].StartsWith('-')) throw new CompileException($"Unknown option: {argv[i]}");
                     files.Add(argv[i]); break;
             }
         }
-        if (files.Count == 0) { Console.Error.WriteLine(Usage); return 1; }
+        if (files.Count == 0) { Console.Error.WriteLine(Usage.Replace("{LANG}", Language.Version)); return 1; }
+        if (language != null) Language.Require(language);
 
         ns ??= Regex.Replace(Path.GetFileNameWithoutExtension(files[0]).ToLowerInvariant(), "[^a-z0-9_.-]", "_");
         if (!Regex.IsMatch(ns, "^[a-z0-9_.-]+$")) throw new CompileException($"Invalid namespace '{ns}' (only a-z0-9_.- allowed)");
@@ -88,7 +117,15 @@ public static class Program
             "csharp" or "c#" => false,
             "minecraft" or "floor" => true,
             _ => throw new CompileException($"Unknown division mode '{division}' (csharp or minecraft)."),
+        }, Runtime: (runtime ?? "optional").ToLowerInvariant() switch
+        {
+            "optional" => RuntimeMode.Optional,
+            "required" => RuntimeMode.Required,
+            "off" or "none" => RuntimeMode.Off,
+            _ => throw new CompileException($"Unknown runtime mode '{runtime}' (optional, required or off)."),
         });
+        if (opts.Runtime == RuntimeMode.Required && min.Format < TargetProfile.RuntimeFormat)
+            throw new CompileException($"\"runtime\": \"required\" needs Minecraft 26.1 or newer (the MC# runtime mod exists for 26.1+), but the target range starts at {min}. Use --mc 26.1-{max}.");
         var result = Compiler.Compile(files.Select(f => (f, IsStdin(f) ? stdinText! : File.ReadAllText(f))).ToList(), ns, min, max, opts);
         if (emitCs) foreach (var (f, cs) in result.Preprocessed) Console.WriteLine($"// ==== {f}\n{cs}");
         foreach (var d in result.Diagnostics) Console.Error.WriteLine(d);
@@ -109,11 +146,37 @@ public static class Program
         Console.WriteLine($"Build succeeded: {outDir} (Minecraft {min} – {max})");
         foreach (var l in result.Layers)
             Console.WriteLine($"  {(l == result.Layers[0] ? "base" : DatapackWriter.OverlayDir(l)),-14} {l.Name,-18} {l.Pack.Functions.Count} functions");
-        return 0;
+        return simulate ? Simulate(outDir, simArgs) : 0;
+    }
+
+    /// <summary>Runs the built pack in tools/mcsim.py (shipped next to the compiler).</summary>
+    static int Simulate(string pack, List<string> simArgs)
+    {
+        string sim = new[] { Path.Combine(AppContext.BaseDirectory, "tools", "mcsim.py"),
+                             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "tools", "mcsim.py") }
+            .Select(Path.GetFullPath).FirstOrDefault(File.Exists)
+            ?? throw new CompileException("The simulator (tools/mcsim.py) was not found next to the compiler. Reinstall with tools/install.sh.");
+        Console.WriteLine($"Simulating {pack} (scores, storage, functions, schedule; blocks and positions are not simulated)");
+        var psi = new System.Diagnostics.ProcessStartInfo("python3") { UseShellExecute = false };
+        psi.ArgumentList.Add(sim);
+        psi.ArgumentList.Add(pack);
+        foreach (var a in simArgs) psi.ArgumentList.Add(a);
+        Console.Out.Flush();
+        try
+        {
+            using var p = System.Diagnostics.Process.Start(psi)!;
+            p.WaitForExit();
+            return p.ExitCode;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            throw new CompileException("mcs run needs Python 3 (python3) for the simulator.");
+        }
     }
 
     static void PrintVersions()
     {
+        Console.WriteLine($"MC# {Language.Version}: #if {string.Join(", ", Language.Symbols)}\n");
         Console.WriteLine("version     data format   #if symbol (defined for this version and above)");
         foreach (var g in Versions.Groups)
             foreach (var r in Versions.Releases.Where(r => r.Format == g.Format))
@@ -131,6 +194,8 @@ public sealed class Project
     public string? Resources { get; set; }
     public string? Description { get; set; }
     public string? Division { get; set; }
+    public string? Runtime { get; set; }
+    public string? Language { get; set; }
     public List<string> Files { get; private set; } = new();
 
     public static Project Load(string file)

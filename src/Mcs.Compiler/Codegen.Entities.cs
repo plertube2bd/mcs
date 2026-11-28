@@ -7,7 +7,14 @@ using Microsoft.CodeAnalysis.Operations;
 namespace Mcs.Compiler;
 
 /// Compile-time integer (unrolled loop variables, constant arguments of [Inline] methods).
-sealed class ConstVar(int value) : Var { public int Value = value; }
+/// A compile-time number (an [Inline] parameter, an unrolled loop variable). Value is the score value (×1000 for
+/// Milli, ×65536 for Q16); Text is how it is written into commands ($"…{v}…").
+sealed class ConstVar(int value, VK kind = VK.Int, string? text = null) : Var
+{
+    public int Value = value;
+    public VK Kind = kind;
+    public string Text => text ?? Codegen.FormatConst(Value, Kind);
+}
 
 public sealed partial class Codegen
 {
@@ -21,6 +28,14 @@ public sealed partial class Codegen
     readonly Dictionary<IFieldSymbol, List<object?>> arrays = new(SymbolEqualityComparer.Default);
     readonly HashSet<IFieldSymbol> runtimeArrays = new(SymbolEqualityComparer.Default);
     int refCounter, inlineDepth;
+
+    /// <summary>The inside of an SNBT compound: removes exactly one outer <c>{ }</c> pair (nested braces stay).</summary>
+    static string SnbtBody(string snbt)
+    {
+        string s = snbt.Trim();
+        if (s.StartsWith('{') && s.EndsWith('}')) s = s[1..^1];
+        return s.Trim();
+    }
 
     // ================================================================ entity classes
     static EntityClass? ClassOf(ITypeSymbol? t)
@@ -94,7 +109,7 @@ public sealed partial class Codegen
                 string nbt = Filter(1), c = NewRefTag();
                 string tags = string.Join(",", new[] { cls.Tag, c }.Where(x => x != null).Select(x => $"\"{x}\""));
                 Emit($"tag @e[tag={c}] remove {c}");
-                EmitCmd(At(pos, co => $"summon {cls.Type} {co} {{Tags:[{tags}]{(nbt.Length > 0 ? "," + nbt.Trim('{', '}') : "")}}}"), inv, pos);
+                EmitCmd(At(pos, co => $"summon {cls.Type} {co} {{Tags:[{tags}]{(nbt.Length > 0 ? "," + SnbtBody(nbt) : "")}}}"), inv, pos);
                 return new RefVar($"@e[tag={c},limit=1]") { Tag = c, Type = t };
             }
         }
@@ -149,7 +164,7 @@ public sealed partial class Codegen
             case "ent.removetag": Emit($"tag {Recv().Selector} remove {ConstStr(args[0].Expression)}"); return null;
             case "ent.hastag": return Store("success", $"if entity {SelWith(Recv().Selector, "tag=" + ConstStr(args[0].Expression))}");
             case "ent.kill": Emit($"kill {Recv().Selector}"); return null;
-            case "ent.merge": Emit($"data merge entity {Recv().Selector} {{{ConstStr(args[0].Expression).Trim('{', '}')}}}"); return null;
+            case "ent.merge": Emit($"data merge entity {Recv().Selector} {{{SnbtBody(ConstStr(args[0].Expression))}}}"); return null;
             case "ent.tp": { var r = Recv(); var pos = EvalPos(args[0].Expression); EmitCmd(At(pos, c => $"tp {r.Selector} {c}"), inv, pos); return null; }
             case "ent.run" or "player.run": { var r = Recv(); Emit($"execute as {r.Selector} at @s run {ActionCommand(args[0].Expression, true)}"); return null; }
             case "ents.count": return Store("result", $"if entity {SelWith(Sel0(), Filter(0))}".Replace("[]", ""));
@@ -312,14 +327,14 @@ public sealed partial class Codegen
         }
         var sym = cur.Model.GetSymbolInfo(e).Symbol;
         if (sym != null && cur.Locals.TryGetValue(sym, out var v))
-            return v switch { StrVar s => s.Value, ConstVar c => c.Value.ToString(CultureInfo.InvariantCulture), _ => null };
-        // compile-time integer expression (e.g. {U.Atk[t] / 10})
-        if (Kind(cur.Model.GetTypeInfo(e).Type) is VK.Int)
+            return v switch { StrVar s => s.Value, ConstVar c => c.Text, _ => null };
+        // compile-time number expression (e.g. {U.Atk[t] / 10}, {i * 0.25} in an unrolled loop)
+        if (Kind(cur.Model.GetTypeInfo(e).Type) is VK.Int or VK.Fixed or VK.Double && Kind(cur.Model.GetTypeInfo(e).Type) is var ek)
         {
             Operand? op = null;
             List<string> cmds;
-            try { cmds = Capture(() => op = EvalNum(e, VK.Int)); } catch (UnsupportedException) { return null; }
-            if (cmds.Count == 0 && op is ConstOp c) return c.Value.ToString(CultureInfo.InvariantCulture);
+            try { cmds = Capture(() => op = EvalNum(e, ek)); } catch (UnsupportedException) { return null; }
+            if (cmds.Count == 0 && op is ConstOp c) return FormatConst(c.Value, ek);
         }
         return null;
     }
@@ -391,7 +406,7 @@ public sealed partial class Codegen
             return Enumerable.Range(a, Math.Max(0, b - a)).Select(i => (Var)new ConstVar(i)).ToList();
         }
         if (ArrayOf(src) is IFieldSymbol f)
-            return arrays[f].Select(o => o is string s ? new StrVar(s) : (Var)new ConstVar(ScaleConst(o, Kind(((IArrayTypeSymbol)f.Type).ElementType)))).ToList();
+            return arrays[f].Select(o => o is string s ? new StrVar(s) : (Var)ConstOf(o, Kind(((IArrayTypeSymbol)f.Type).ElementType))).ToList();
         return null;
     }
 
@@ -504,14 +519,15 @@ public sealed partial class Codegen
             Var val;
             var k = Kind(p.Type);
             if (a.ArgumentKind == ArgumentKind.DefaultValue)
-                val = k == VK.String ? new StrVar(p.ExplicitDefaultValue as string) : new ConstVar(ScaleConst(p.ExplicitDefaultValue, k));
+                val = k == VK.String ? new StrVar(p.ExplicitDefaultValue as string) : ConstOf(p.ExplicitDefaultValue, k);
             else
             {
                 var x = (ExpressionSyntax)a.Value.Syntax;
                 val = k switch
                 {
                     VK.String => new StrVar(ConstString(x)),
-                    VK.Int or VK.Bool or VK.Fixed or VK.Double => EvalNum(x, k) is ConstOp c ? new ConstVar(c.Value) : new ScoreVar(ToTemp(EvalNum(x, k)), k),
+                    VK.Int or VK.Bool or VK.Fixed or VK.Double => cur.Model.GetConstantValue(x) is { HasValue: true } xc ? ConstOf(xc.Value, k)
+                        : EvalNum(x, k) is ConstOp c ? new ConstVar(c.Value, k) : new ScoreVar(ToTemp(EvalNum(x, k)), k),
                     VK.Position => new PosVar(EvalPos(x)),
                     VK.Ref => Resolve(GetRef(x)),
                     VK.Block or VK.Button or VK.Text or VK.Gui or VK.Item => EvalLibObject(x, k),

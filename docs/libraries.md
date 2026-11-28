@@ -2,6 +2,8 @@
 
 MC# ships with built-in libraries. All of them compile into the datapack itself, so the output pack never depends on other datapacks or mods.
 
+> This page shows how to use them. Every type, member, parameter default and enum value is in the [API reference](api.md), generated from the compiler. The exact rules are in the [specification](ko/spec.md) (Korean).
+
 | Library | How to load it | Contents |
 |---|---|---|
 | **Core** | Always available | `asm`, `m.Console`, `Position`, `GetWorldSpawn`, `SetWorldSpawn`, `SpawnEntity`, `m.SetBlock`/`FillBlock`/`IsBlock`, `[Load]`, `[Tick]`, `m.Mount`/`MountEntity`/`MountBlock`, `m.Call`, `NString`, `NArray<T>` |
@@ -660,6 +662,14 @@ Sound.Play("entity.experience_orb.pickup", pos, 1, 2);          // volume, pitch
 Sound.PlayTo(Player.All, "block.note_block.bell", 0.5f, 1, SoundSource.Record);
 Sound.Stop(Player.All);                                          // or Stop(players, "sound.id")
 ```
+
+| Call | Plays at | Heard by |
+|---|---|---|
+| `Play(id, pos, …)` | `pos` | every player in range of `pos` |
+| `PlayTo(players, id, …)` | each player's own position (`execute as <players> at @s run playsound … @s ~ ~ ~`) | that player only |
+| `Stop(players[, id])` | — | stops in every sound category |
+
+`SoundSource`: `Master`, `Music`, `Record`, `Weather`, `Block`, `Hostile`, `Neutral`, `Player`, `Ambient`, `Voice`. Every parameter and default is in the [API reference](api.md#soundlib).
 
 ---
 

@@ -1,0 +1,6 @@
+name: MCSRuntime
+version: '${version}'
+main: mcs.runtime.paper.McsPaperPlugin
+bootstrapper: mcs.runtime.paper.McsPaperBootstrap
+api-version: '26.1'
+description: 'Runtime services for MC# datapacks: fast paths, permission level 3-4 commands from functions, /<namespace>:<function> shortcuts, a debugger (/mcs) and an interpreter (/mcsi).'

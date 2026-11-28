@@ -1,0 +1,25 @@
+// 튜토리얼 4: 소수와 카메라 흔들림 (Python 없이)
+// @mc 1.20.2-26.3
+// @do 0 join Steve
+use MathLib;
+
+public static void Main()
+{
+    Milli price = 2.5f;
+    Milli total = price * 3;                  // 7.500
+    Q16 half = 0.5;
+    m.Console.WriteLine($"total={total} half={half} int={(int)total}");
+    Shake(4);
+}
+
+static void Shake(int ticks)
+{
+    for (int t = 0; t < ticks; t++)
+    {
+        Q16 phase = (Q16)t * 1.7;
+        Q16 yaw = Math.Sin(phase) * 0.8;      // -0.8 ~ 0.8도
+        Q16 pitch = Math.Cos(phase) * 0.4;
+        asm $"execute as @a at @s run tp @s ~ ~ ~ ~{yaw} ~{pitch}";
+        Wait(1);
+    }
+}

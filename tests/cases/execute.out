@@ -1,0 +1,62 @@
+=== format 15 ===
+[t0] * join Alex
+[t0] * join Steve
+[t1] > summon minecraft:marker 0 64 0 {Tags:["t.spot","mcs.execute.r0"]}
+[t1] to Alex: hi
+[t1] to Steve: hi
+[t1] count=2
+[t1] hits=12
+[t1] two players
+[t1] n=1
+[t1] hello from a method
+[t1] [minecraft:marker] facing
+[t1] > execute if block 0 60 0 minecraft:stone run tellraw @a ["",{"text":"stone"}]
+[t1] > execute store success score $main#t2 mcs.execute at @s unless block ~ ~-1 ~ minecraft:air
+[t1] > execute store success score $main#t2 mcs.execute at @s unless block ~ ~-1 ~ minecraft:air
+=== format 48 ===
+[t0] * join Alex
+[t0] * join Steve
+[t1] > summon minecraft:marker 0 64 0 {Tags:["t.spot","mcs.execute.r0"]}
+[t1] to Alex: hi
+[t1] to Steve: hi
+[t1] count=2
+[t1] hits=12
+[t1] two players
+[t1] n=1
+[t1] hello from a method
+[t1] [minecraft:marker] facing
+[t1] > execute if block 0 60 0 minecraft:stone run tellraw @a ["",{"text":"stone"}]
+[t1] > execute store success score $main#t2 mcs.execute at @s unless block ~ ~-1 ~ minecraft:air
+[t1] > execute store success score $main#t2 mcs.execute at @s unless block ~ ~-1 ~ minecraft:air
+=== format 88 ===
+[t0] * join Alex
+[t0] * join Steve
+[t0] > forceload add ~ ~
+[t1] > summon minecraft:marker 0 64 0 {Tags:["t.spot","mcs.execute.r0"]}
+[t1] to Alex: hi
+[t1] to Steve: hi
+[t1] count=2
+[t1] hits=12
+[t1] two players
+[t1] n=1
+[t1] hello from a method
+[t1] [minecraft:marker] facing
+[t1] > execute if block 0 60 0 minecraft:stone run tellraw @a ["",{"text":"stone"}]
+[t1] > execute store success score $main#t2 mcs.execute at @s unless block ~ ~-1 ~ minecraft:air
+[t1] > execute store success score $main#t2 mcs.execute at @s unless block ~ ~-1 ~ minecraft:air
+=== format 101 ===
+[t0] * join Alex
+[t0] * join Steve
+[t0] > forceload add ~ ~
+[t1] > summon minecraft:marker 0 64 0 {Tags:["t.spot","mcs.execute.r0"]}
+[t1] to Alex: hi
+[t1] to Steve: hi
+[t1] count=2
+[t1] hits=12
+[t1] two players
+[t1] n=1
+[t1] hello from a method
+[t1] [minecraft:marker] facing
+[t1] > execute if block 0 60 0 minecraft:stone run tellraw @a ["",{"text":"stone"}]
+[t1] > execute store success score $main#t2 mcs.execute at @s unless block ~ ~-1 ~ minecraft:air
+[t1] > execute store success score $main#t2 mcs.execute at @s unless block ~ ~-1 ~ minecraft:air

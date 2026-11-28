@@ -2,7 +2,7 @@
   "name": "mcs-language",
   "displayName": "MC# (Minecraft C#)",
   "description": "Syntax highlighting, live error checking, snippets and build-error matching for MC# (.mcs), a C#-like language that compiles to Minecraft datapacks.",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "publisher": "mcs",
   "license": "MIT",
   "engines": {

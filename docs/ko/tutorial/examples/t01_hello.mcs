@@ -1,0 +1,8 @@
+// 튜토리얼 1: 첫 프로그램
+public static void Main()
+{
+    int sum = 0;
+    for (int i = 1; i <= 10; i++)
+        sum += i;
+    m.Console.WriteLine($"1부터 10까지의 합: {sum}");
+}

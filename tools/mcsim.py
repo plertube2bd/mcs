@@ -8,7 +8,7 @@ Simulates the parts of the game that MC# code mostly talks to:
 There are no blocks or positions.
 
 Players only exist when a script adds them. An action runs at the start of its tick (tick 0 = before load):
-  join NAME · leave NAME · die NAME · respawn NAME · kill NAME (NAME killed something)
+  reload (runs #load again) · join NAME · leave NAME · die NAME · respawn NAME · kill NAME (NAME killed something)
   use NAME ITEM (used / right-clicked an item) · stat NAME CRITERION [N] · trigger NAME OBJECTIVE [set|add N]
   click NAME (right-click with the held item) · hold NAME SLOT (select an inventory slot) · offhand NAME SLOT (swap into the off hand)
 Players have an inventory: /give fills it (NBT and item-component syntax), and `if items` / `nbt={SelectedItem:…}` read it.
@@ -366,8 +366,9 @@ class Entity:
 
 
 class Sim:
-    def __init__(self, pack, out=print):
+    def __init__(self, pack, out=print, runtime=False):
         self.pack = pack
+        self.runtime = runtime         # the MC# runtime mod (mcs.jar) is "installed": mcs commands work
         self.out = out
         self.objectives = {}           # name → criteria
         self.scores = {}               # (holder, objective) → int
@@ -398,18 +399,41 @@ class Sim:
         except CommandError as e:
             self.error(str(e))
             return 0
+        if any(line.startswith('$') for line in lines):
+            if args is None:
+                self.error(f'{rl}: macro line without arguments')
+                return 0
+            lines = [re.sub(r'\$\((\w+)\)', lambda m: macro_value(args.get(m.group(1), '')), line[1:]) if line.startswith('$') else line
+                     for line in lines]
+            # Like the game, a macro function is parsed when it is called: without the runtime mod, a line using
+            # its /mcs command does not parse, so the call fails (silently, as for #load / #tick sources)
+            if not self.runtime and any(re.match(r'(.*\brun )?mcs ', line) for line in lines):
+                return 0
+        return self.run_lines(lines, ctx)
+
+    def run_lines(self, lines, ctx):
         result = 0
         try:
             for line in lines:
-                if line.startswith('$'):
-                    if args is None:
-                        self.error(f'{rl}: macro line without arguments')
-                        return 0
-                    line = re.sub(r'\$\((\w+)\)', lambda m: macro_value(args.get(m.group(1), '')), line[1:])
                 result = self.run(line, ctx)
         except Return as r:
             return r.value
         return result
+
+    def runtime_cmd(self, t, cmd, ctx):
+        """The runtime mod's commands. Fast paths run the pack's own helper (minus its fast-path line), so the
+        simulator checks the plumbing; tools/mcreal.py checks that the mod computes the same results."""
+        if t[1] == 'probe':
+            return 1
+        if t[1] == 'fast':
+            op, obj = t[2], t[-1]
+            ns = obj[len('mcs.'):]
+            rl = f'{ns}:__str/indexof' if op == 'indexof' else f'{ns}:__math/{op}'
+            return self.run_lines(self.pack.function(rl)[1:], ctx)
+        if t[1] == 'sudo':
+            self.emit('> [sudo] ' + cmd[len('mcs sudo '):])
+            return self.run(cmd[len('mcs sudo '):], ctx)
+        raise CommandError(f'unknown mcs command: {cmd}')
 
     def run(self, cmd, ctx):
         """Runs one command; returns its result (0 = failed)."""
@@ -435,6 +459,8 @@ class Sim:
                 if not isinstance(args, dict):
                     raise CommandError(f'no macro arguments at {t[4]} {t[5] if len(t) > 5 else ""}')
                 return self.run_function(t[1], ctx, args)
+            if len(t) > 2 and t[2].startswith('{'):      # function <id> {inline macro arguments}
+                return self.run_function(t[1], ctx, Snbt.parse(cmd.split(' ', 2)[2]))
             if t[1].startswith('#'):
                 for f in self.pack.tag(t[1][1:]):
                     self.run_function(f, ctx)
@@ -446,6 +472,8 @@ class Sim:
             raise Return(int(t[1]) if len(t) > 1 else 0)
         if head == 'schedule':
             return self.schedule_cmd(t)
+        if head == 'mcs' and self.runtime:
+            return self.runtime_cmd(t, cmd, ctx)
         if head == 'data':
             return self.data(t, cmd)
         if head == 'tellraw':
@@ -1073,6 +1101,10 @@ class Sim:
 
     def act(self, action):
         w = action.split()
+        if w == ['reload']:                  # /reload: #load runs again; scores, storage and schedules are kept
+            self.emit(f'* {action}')
+            self.load()
+            return
         verb, name = w[0], w[1]
         p = next((e for e in self.entities if e.is_player and e.name == name), None)
         self.emit(f'* {action}')
@@ -1333,16 +1365,17 @@ def parse_actions(specs):
     return out
 
 
-def simulate(pack_dir, fmt=None, ticks=None, actions=()):
+def simulate(pack_dir, fmt=None, ticks=None, actions=(), runtime=False):
     """Runs a pack and returns the output lines. actions: [(tick, "join Steve"), …]"""
-    return simulate_state(pack_dir, fmt, ticks, actions)[0]
+    return simulate_state(pack_dir, fmt, ticks, actions, runtime)[0]
 
 
-def simulate_state(pack_dir, fmt=None, ticks=None, actions=()):
-    """Like simulate(), but also returns the finished Sim (scores, storage, the tick it stopped at)."""
+def simulate_state(pack_dir, fmt=None, ticks=None, actions=(), runtime=False):
+    """Like simulate(), but also returns the finished Sim (scores, storage, the tick it stopped at).
+    runtime: simulate a server with the MC# runtime mod (mcs.jar) installed."""
     lines = []
     Entity.counter = 0
-    sim = Sim(Pack(pack_dir, fmt), lines.append)
+    sim = Sim(Pack(pack_dir, fmt), lines.append, runtime)
     sim.run_all(ticks, actions)
     return lines, sim
 
@@ -1354,11 +1387,12 @@ def main():
     ap.add_argument('--ticks', type=int, help='ticks to simulate after load (default: until nothing is scheduled)')
     ap.add_argument('--formats', action='store_true', help='list the pack formats that have their own layer')
     ap.add_argument('--do', action='append', default=[], metavar='"TICK ACTION"', help='scripted player action, e.g. "0 join Steve", "5 use Steve carrot_on_a_stick"')
+    ap.add_argument('--runtime', action='store_true', help='simulate a server with the MC# runtime mod (mcs.jar) installed')
     a = ap.parse_args()
     if a.formats:
         print(' '.join(map(str, Pack(a.pack).formats)))
         return
-    for line in simulate(a.pack, a.format, a.ticks, parse_actions(a.do)):
+    for line in simulate(a.pack, a.format, a.ticks, parse_actions(a.do), a.runtime):
         print(line)
 
 

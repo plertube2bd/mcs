@@ -333,7 +333,7 @@ public sealed partial class Codegen
         if (!usesStrIndexOf) return;
         string S = Storage, d = $"{ns}:__str";
         string L = H("$__str.l"), N = H("$__str.n"), R = H("$__str.r"), I = H("$__str.i"), E = H("$__str.e"), D = H("$__str.d");
-        pack.Functions[$"{d}/indexof"] = new()
+        pack.Functions[$"{d}/indexof"] = WithFastPath("indexof", new()
         {
             $"execute store result score {L} run data get storage {S} str.h",
             $"execute store result score {N} run data get storage {S} str.n",
@@ -341,7 +341,7 @@ public sealed partial class Codegen
             $"scoreboard players set {I} 0",
             $"scoreboard players operation {E} = {N}",
             $"execute if score {E} <= {L} run function {d}/step",
-        };
+        }, ("s", S), ("o", Obj));
         pack.Functions[$"{d}/step"] = new()
         {
             $"execute store result storage {S} str.i int 1 run scoreboard players get {I}",
@@ -692,7 +692,7 @@ public sealed partial class Codegen
     // ---------------------------------------------------------------- static NString / NArray fields
     void DeclareNbtStatic(SemanticModel model, IFieldSymbol f, VariableDeclaratorSyntax v, VK k)
     {
-        string cls = f.ContainingType.Name == Preprocessor.GlobalClass ? "" : Snake(f.ContainingType.Name) + ".";
+        string cls = StaticPrefix(f);
         string path = StoragePathOf($"$static.{cls}{f.Name}");
         var init = v.Initializer?.Value;
         if (k == VK.NStr)

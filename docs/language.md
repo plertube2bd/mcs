@@ -381,6 +381,30 @@ use PlayerLib;
 | `Exec.At(pos, () => { ... })` | Run at a position (may have runtime coordinates) |
 | `new Position(x, y, z)` | Coordinates may be runtime values (macro) |
 
+## Execute chains
+
+`Execute` builds one `/execute` command fluently. Write the whole chain in one statement and end it with `.Run(...)` (a lambda or a parameterless static method):
+
+```csharp
+Execute.AsPlayerObject(Player.All)
+    .At(Player.Self)
+    .UnlessBlock("air", Position.Here.Offset(0, -1, 0))
+    .Run(() => { Player.Self.SendMessage("on the ground"); });
+// execute as @a at @s unless block ~ ~-1 ~ minecraft:air run tellraw @s ...
+```
+
+| Step | Subcommand |
+|---|---|
+| `As(target)` / `AsPlayerObject(players)` | `as` — inside, each target is `@s` (`Player.Self`) |
+| `At(target)` / `At(pos)` / `Positioned(pos)` | `at` / `positioned` (positions may have runtime coordinates) |
+| `In(Dimension.Nether)`, `Rotated(yaw, pitch)`, `RotatedAs(target)`, `Facing(pos)`, `Facing(target)`, `AnchoredEyes()`, `Align("xz")` | the matching subcommand |
+| `IfBlock(id, pos)` / `UnlessBlock(id, pos)` (`IfBlockObject` / `UnlessBlockObject` for Block objects) | `if/unless block` |
+| `IfEntity(target)` / `UnlessEntity(target)` | `if/unless entity` |
+| `If(cond)` / `Unless(cond)` | any MC# bool, checked at that point of the chain (once per `As` target when it comes after `As`) |
+| `Sub("raw subcommands")` | written as is |
+
+Targets are an Entity, an entity reference (`Player.All`, an entity class object) or a selector string. Entity references from outside the chain keep pointing at the same entity inside `Run`. When a step needs commands of its own (a runtime `If`, a block test at an entity's position, an entity query), the rest of the chain moves into a sub-function so those commands run in the right context.
+
 ## Chat buttons that run a command
 
 `new Button("[Build]", "trigger war.act set 3")` creates a button that runs the given command. `new Button(label, Method)` creates one that calls an MC# method.

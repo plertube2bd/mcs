@@ -94,6 +94,51 @@ public sealed partial class Codegen
                 Op(S("a"), "+=", S("a1")),
             };
         }
+        if (mathFns.Contains("mmul"))
+        {
+            // Milli: a = floor(a * b / 1000), exact for any result that fits in 32 bits.
+            // a = ah·1000 + al, b = bh·1000 + bl  (al, bl ∈ [0, 1000), floor division)
+            // a·b/1000 = ah·bh·1000 + ah·bl + al·bh + al·bl/1000   (no term overflows on its own)
+            fns["mmul"] = new()
+            {
+                Op(S("ah"), "=", S("a")), Op(S("ah"), "/=", C(Scale)),
+                Op(S("al"), "=", S("a")), Op(S("al"), "%=", C(Scale)),
+                Op(S("bh"), "=", S("b")), Op(S("bh"), "/=", C(Scale)),
+                Op(S("bl"), "=", S("b")), Op(S("bl"), "%=", C(Scale)),
+                Op(S("a"), "=", S("ah")), Op(S("a"), "*=", S("bh")), Op(S("a"), "*=", C(Scale)),
+                Op(S("ah"), "*=", S("bl")), Op(S("a"), "+=", S("ah")),
+                Op(S("a0"), "=", S("al")), Op(S("a0"), "*=", S("bh")), Op(S("a"), "+=", S("a0")),
+                Op(S("al"), "*=", S("bl")), Op(S("al"), "/=", C(Scale)), Op(S("a"), "+=", S("al")),
+            };
+        }
+        if (mathFns.Contains("mdiv"))
+        {
+            // Milli: a = a * 1000 / b rounded toward zero (like C#), on |a|, |b|: q = a / b, r = a % b,
+            // a = q·1000 + r·1000/b. Exact while |b| ≤ 2147.483; above that r·1000 would overflow, so
+            // r / (b / 1000) is used (the last digit may be off by one). b == 0 leaves a unchanged.
+            fns["mdiv"] = new()
+            {
+                $"scoreboard players set {S("neg")} 0",
+                $"execute if score {S("a")} matches ..-1 run scoreboard players add {S("neg")} 1",
+                $"execute if score {S("a")} matches ..-1 run {Op(S("a"), "*=", C(-1))}",
+                $"execute if score {S("b")} matches ..-1 run scoreboard players add {S("neg")} 1",
+                $"execute if score {S("b")} matches ..-1 run {Op(S("b"), "*=", C(-1))}",
+                $"execute unless score {S("b")} matches 0 run function {ns}:__math/mdiv_u",
+                $"execute if score {S("neg")} matches 1 run {Op(S("a"), "*=", C(-1))}",
+            };
+            fns["mdiv_u"] = new()
+            {
+                Op(S("q"), "=", S("a")), Op(S("q"), "/=", S("b")),
+                Op(S("r"), "=", S("a")), Op(S("r"), "%=", S("b")),
+                $"execute if score {S("b")} matches ..2147483 run {Op(S("r"), "*=", C(Scale))}",
+                $"execute if score {S("b")} matches ..2147483 run {Op(S("r"), "/=", S("b"))}",
+                $"execute if score {S("b")} matches 2147484.. run {Op(S("d"), "=", S("b"))}",
+                $"execute if score {S("b")} matches 2147484.. run {Op(S("d"), "/=", C(Scale))}",
+                $"execute if score {S("b")} matches 2147484.. run {Op(S("r"), "/=", S("d"))}",
+                $"execute if score {S("r")} matches {Scale}.. run scoreboard players set {S("r")} {Scale - 1}",
+                Op(S("a"), "=", S("q")), Op(S("a"), "*=", C(Scale)), Op(S("a"), "+=", S("r")),
+            };
+        }
         if (mathFns.Contains("ddiv"))
         {
             // a = a * 65536 / b rounded toward zero (like C#), by long division on |a|, |b| (16 fraction bits, no overflow).
@@ -224,6 +269,10 @@ public sealed partial class Codegen
                 $"function {ns}:__math/ddiv",
                 Op(S("r"), "=", S("a")),
             };
+        // The runtime mod computes these in one step (bit-identical results)
+        foreach (var name in new[] { "dmul", "mmul", "mdiv", "ddiv", "idiv", "irem", "sin", "cos", "tan" })
+            if (fns.TryGetValue(name, out var body) && !(name == "ddiv" && UseCompute))
+                fns[name] = WithFastPath(name, body, ("o", Obj));
         foreach (var (name, cmds) in fns) pack.Functions[$"{ns}:__math/{name}"] = cmds;
     }
 }

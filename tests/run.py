@@ -15,12 +15,16 @@ Kinds of tests
                             If layers differ, .out holds one "=== format N ===" section per layer.
   tests/errors/<name>.mcs   must fail to compile; every `// @error <text>` line must appear in the errors.
   examples/*.mcs            must compile.
+  docs/ko/tutorial/examples/<name>.mcs   tutorial programs: like tests/cases (the tutorial shows <name>.out).
+  docs/api.md               must equal `mcs --api-docs` (-u regenerates it).
 
 Directives (comment lines anywhere in a case):
   // @mc 1.20.2-26.3        version range to build (default: the compiler's default range)
   // @ticks 100             ticks to simulate (default: until nothing is scheduled; 20 with #tick functions)
   // @do 5 die Steve        scripted player action at a tick (see tools/mcsim.py); repeatable
   // @warning <text>        the build must print a warning containing <text>; repeatable
+  // @runtime               simulate a server with the MC# runtime mod (mcs.jar) installed
+  // @args --runtime required   extra compiler options
   // @real load             on real servers, only check that the pack loads (for world state the simulator lacks)
 """
 import concurrent.futures
@@ -49,9 +53,9 @@ def build_compiler():
         sys.exit('compiler build failed')
 
 
-def compile_mcs(src, out_dir, mc=None):
+def compile_mcs(src, out_dir, mc=None, extra=''):
     ns = re.sub(r'[^a-z0-9_]', '_', os.path.splitext(os.path.basename(src))[0].lower())
-    args = ['dotnet', DLL, src, '-o', out_dir, '-n', ns] + (['--mc', mc] if mc else [])
+    args = ['dotnet', DLL, src, '-o', out_dir, '-n', ns] + (['--mc', mc] if mc else []) + extra.split()
     r = subprocess.run(args, env=ENV, capture_output=True, text=True, cwd=ROOT)
     return r.returncode == 0, (r.stdout + r.stderr).replace(ROOT + os.sep, '')
 
@@ -68,7 +72,7 @@ def actions(text):
 def run_case(path, tmp):
     d, text = directives(path)
     out_dir = os.path.join(tmp, os.path.basename(path))
-    ok, log = compile_mcs(path, out_dir, d.get('mc'))
+    ok, log = compile_mcs(path, out_dir, d.get('mc'), d.get('args', ''))
     if not ok:
         return 'compile error:\n' + log
     missing = [w for w in re.findall(r'^\s*//\s*@warning\s+(.*?)\s*$', text, re.M) if w not in log]
@@ -78,7 +82,7 @@ def run_case(path, tmp):
     per_format = {}
     for fmt in mcsim.Pack(out_dir).formats:
         try:
-            per_format[fmt] = mcsim.simulate(out_dir, fmt, ticks, actions(text))
+            per_format[fmt] = mcsim.simulate(out_dir, fmt, ticks, actions(text), 'runtime' in d or re.search(r'^\s*//\s*@runtime\s*$', text, re.M) is not None)
         except Exception as e:  # a simulator crash is a test failure, not a runner crash
             per_format[fmt] = [f'!! simulator crashed: {type(e).__name__}: {e}']
     outputs = list(per_format.values())
@@ -90,7 +94,7 @@ def run_case(path, tmp):
 def run_error(path, tmp):
     d_text = directives(path)[1]
     wanted = re.findall(r'^\s*//\s*@error\s+(.*?)\s*$', d_text, re.M)
-    ok, log = compile_mcs(path, os.path.join(tmp, os.path.basename(path)))
+    ok, log = compile_mcs(path, os.path.join(tmp, os.path.basename(path)), directives(path)[0].get('mc'), directives(path)[0].get('args', ''))
     if ok:
         return 'expected a compile error, but the build succeeded'
     missing = [w for w in wanted if w not in log]
@@ -169,7 +173,7 @@ def run_real(cases, examples, tmp, versions, servers):
         name = os.path.relpath(p, ROOT)
         out_dir = os.path.join(tmp, 'real', os.path.basename(p))
         d = directives(p)
-        ok, log = compile_mcs(p, out_dir, d[0].get('mc') if is_case else None)
+        ok, log = compile_mcs(p, out_dir, d[0].get('mc') if is_case else None, d[0].get('args', '') if is_case else '')
         if ok:
             packs.append((name, out_dir, d[1] if is_case else None, d[0].get('mc') if is_case else None))
     print(f'\n{DIM}real servers: {", ".join(versions)} ({len(packs)} packs each){RESET}')
@@ -199,11 +203,23 @@ def main():
         full = os.path.join(ROOT, d)
         return sorted(os.path.join(full, f) for f in os.listdir(full) if f.endswith(ext) and pick(f)) if os.path.isdir(full) else []
 
-    cases, errors, examples = listdir('tests/cases'), listdir('tests/errors'), listdir('examples')
+    cases, errors, examples = listdir('tests/cases') + listdir('docs/ko/tutorial/examples'), listdir('tests/errors'), listdir('examples')
     print(f'{DIM}building compiler…{RESET}')
     build_compiler()
 
     failed = []
+    if not args or pick('api.md'):   # docs/api.md is generated from the compiler's declarations
+        api = subprocess.run(['dotnet', DLL, '--api-docs'], env=ENV, capture_output=True, text=True).stdout
+        api_path = os.path.join(ROOT, 'docs', 'api.md')
+        current = open(api_path, encoding='utf-8').read() if os.path.exists(api_path) else None
+        if api != current and update:
+            open(api_path, 'w', encoding='utf-8').write(api)
+            print(f'{GREEN}updated{RESET} docs/api.md')
+        elif api != current:
+            failed.append('docs/api.md')
+            print(f'{RED}FAIL{RESET} docs/api.md is out of date: run tests/run.py -u (or mcs --api-docs > docs/api.md)')
+        else:
+            print(f'{GREEN}ok{RESET}   docs/api.md')
     with tempfile.TemporaryDirectory(prefix='mcs-test-') as tmp, concurrent.futures.ThreadPoolExecutor(os.cpu_count() or 4) as pool:
         jobs = [(p, 'case', pool.submit(run_case, p, tmp)) for p in cases]
         jobs += [(p, 'error', pool.submit(run_error, p, tmp)) for p in errors]
@@ -231,7 +247,7 @@ def main():
             else:
                 print(f'{GREEN}ok{RESET}   {rel}')
 
-        total = len(cases) + len(errors) + len(examples)
+        total = len(cases) + len(errors) + len(examples) + (1 if not args or pick('api.md') else 0)
         print(f'\n{total - len(failed)}/{total} passed' + (f' — {RED}{len(failed)} failed{RESET}' if failed else ''))
 
         if '--real' in sys.argv:

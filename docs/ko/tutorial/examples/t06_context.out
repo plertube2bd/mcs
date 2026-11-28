@@ -1,0 +1,30 @@
+=== format 15 ===
+[t0] > kill @e[type=minecraft:marker,tag=mcs.t06_context.spawn]
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["mcs.t06_context.spawn"]}
+[t1] * join Steve
+[t1] to Steve: 어서 와!
+[t1] > playsound minecraft:entity.player.levelup master @s ~ ~ ~ 1 1
+[t1] > playsound minecraft:block.bell.use master @a ~ ~ ~ 1 1
+=== format 48 ===
+[t0] > kill @e[type=minecraft:marker,tag=mcs.t06_context.spawn]
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["mcs.t06_context.spawn"]}
+[t1] * join Steve
+[t1] to Steve: 어서 와!
+[t1] > playsound minecraft:entity.player.levelup master @s ~ ~ ~ 1 1
+[t1] > playsound minecraft:block.bell.use master @a ~ ~ ~ 1 1
+=== format 88 ===
+[t0] > forceload add ~ ~
+[t0] > kill @e[type=minecraft:marker,tag=mcs.t06_context.spawn]
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["mcs.t06_context.spawn"]}
+[t1] * join Steve
+[t1] to Steve: 어서 와!
+[t1] > playsound minecraft:entity.player.levelup master @s ~ ~ ~ 1 1
+[t1] > playsound minecraft:block.bell.use master @a ~ ~ ~ 1 1
+=== format 101 ===
+[t0] > forceload add ~ ~
+[t0] > kill @e[type=minecraft:marker,tag=mcs.t06_context.spawn]
+[t0] > summon minecraft:marker ~ ~ ~ {Tags:["mcs.t06_context.spawn"]}
+[t1] * join Steve
+[t1] to Steve: 어서 와!
+[t1] > playsound minecraft:entity.player.levelup master @s ~ ~ ~ 1 1
+[t1] > playsound minecraft:block.bell.use master @a ~ ~ ~ 1 1

@@ -1,0 +1,43 @@
+// Fluent /execute: Execute.As(...).At(...).If...(...).Run(...).
+// @do 0 join Steve
+// @do 0 join Alex
+use PlayerLib;
+
+[Entity("minecraft:marker", "t.spot")]
+public partial class Spot : EntityObject { public int Hits; }
+
+static int count;
+
+static void Hello() { m.Console.WriteLine("hello from a method"); }
+
+public static void Main() {
+    Wait(1);
+    var spot = Entities.Spawn<Spot>(new Position(0, 64, 0));
+
+    // as each player
+    Execute.AsPlayerObject(Player.All).Run(() => { count++; Player.Self.SendMessage("hi"); });
+    m.Console.WriteLine($"count={count}");
+
+    // as + at + entity conditions; the outer entity reference stays usable inside
+    Execute.As(Player.Named("Steve")).At(Player.Self).IfEntity(spot).Run(() => { spot.Hits += 10; });
+    Execute.AsPlayerObject(Player.All).UnlessEntity(Player.Named("Nobody")).Run(() => { spot.Hits++; });
+    m.Console.WriteLine($"hits={spot.Hits}");
+
+    // runtime / constant bool conditions
+    Execute.If(count == 2).Run(() => { m.Console.WriteLine("two players"); });
+    Execute.Unless(count == 2).Run(() => { m.Console.WriteLine("never"); });
+    Execute.If(false).Run(() => { m.Console.WriteLine("never"); });
+    // a condition after As is checked per player
+    Player.Named("Steve").AddTag("vip");
+    int n = 0;
+    Execute.AsPlayerObject(Player.All).If(Player.Self.HasTag("vip")).Run(() => { n++; });
+    m.Console.WriteLine($"n={n}");
+
+    // positions, rotation, raw subcommands, a method group
+    Execute.At(new Position(1, 2, 3)).In(WorldLib.Dimension.Nether).Rotated(90, 0).AnchoredEyes().Sub("align xz").Run(Hello);
+    Execute.As(spot).At(spot).Facing(new Position(0, 0, 0)).Run(() => { asm say facing; });
+
+    // block tests (the simulator only logs them)
+    Execute.IfBlock("stone", new Position(0, 60, 0)).Run(() => { m.Console.WriteLine("stone"); });
+    Execute.AsPlayerObject(Player.All).UnlessBlock("air", Player.Self.Position.Offset(0, -1, 0)).Run(() => { n++; });
+}

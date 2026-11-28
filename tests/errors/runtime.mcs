@@ -1,0 +1,5 @@
+// @mc 26.1-26.3
+public static void Main() {
+    Runtime.Sudo("op Steve");
+}
+// @error Runtime.Sudo only works when the pack requires the MC# runtime mod

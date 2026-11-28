@@ -1,0 +1,7 @@
+[t0] * join Alex
+[t0] * join Steve
+[t1] to Alex: 안녕!
+[t1] to Steve: 안녕!
+[t1] 인사한 수: 2
+[t1] to Steve: VIP 전용 메시지
+[t1] > execute as @a at @s unless block ~ ~-1 ~ minecraft:air run tellraw @s ["",{"text":"땅 위에 서 있음"}]

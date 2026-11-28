@@ -2,6 +2,8 @@
 
 MC#에는 여러 내장 라이브러리가 있습니다. 모두 데이터팩 안에 함께 컴파일되므로, 출력된 팩은 다른 데이터팩이나 모드에 의존하지 않습니다.
 
+> 이 문서는 사용 예를 보여 줍니다. 모든 타입, 멤버, 매개변수 기본값, 열거형 값은 컴파일러에서 자동 생성되는 [API 레퍼런스](../api.md)에 있습니다. 동작의 정확한 규칙은 [언어 명세](spec.md)를 보세요.
+
 | 라이브러리 | 불러오는 방법 | 내용 |
 |---|---|---|
 | **Core** | 항상 사용 가능 | `asm`, `m.Console`, `Position`, `GetWorldSpawn`, `SetWorldSpawn`, `SpawnEntity`, `m.SetBlock`/`FillBlock`/`IsBlock`, `[Load]`, `[Tick]`, `m.Mount`/`MountEntity`/`MountBlock`, `m.Call`, `NString`, `NArray<T>` |
@@ -660,6 +662,14 @@ Sound.Play("entity.experience_orb.pickup", pos, 1, 2);          // volume, pitch
 Sound.PlayTo(Player.All, "block.note_block.bell", 0.5f, 1, SoundSource.Record);
 Sound.Stop(Player.All);                                          // 또는 Stop(players, "sound.id")
 ```
+
+| 호출 | 어디서 재생 | 누가 듣나 |
+|---|---|---|
+| `Play(id, pos, …)` | `pos` | `pos` 근처의 모든 플레이어 |
+| `PlayTo(players, id, …)` | 각 플레이어 자신의 위치 (`execute as <players> at @s run playsound … @s ~ ~ ~`) | 그 플레이어만 |
+| `Stop(players[, id])` | — | 모든 소리 범주에서 정지 |
+
+`SoundSource`: `Master`, `Music`, `Record`, `Weather`, `Block`, `Hostile`, `Neutral`, `Player`, `Ambient`, `Voice`. 모든 매개변수와 기본값은 [API 레퍼런스](../api.md#soundlib)에 있습니다.
 
 ---
 

@@ -1,0 +1,25 @@
+plugins {
+    id 'java'
+    id 'io.papermc.paperweight.userdev' version '2.0.0-beta.24'
+}
+
+base { archivesName = 'mcs-paper' }
+group = 'mcs.runtime'
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+}
+
+dependencies {
+    paperweight.paperDevBundle(project.paper_dev_bundle)
+}
+
+sourceSets.main.java.srcDir '../common/src/main/java'
+
+processResources {
+    def version = project.version
+    inputs.property 'version', version
+    filesMatching('paper-plugin.yml') { expand 'version': version }
+}

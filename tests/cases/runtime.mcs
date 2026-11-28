@@ -1,0 +1,22 @@
+// The MC# runtime mod (mcs.jar): fast paths, Runtime.Sudo, Runtime.IsAvailable.
+// @mc 26.1-26.3
+// @args --runtime required
+// @runtime
+use MathLib;
+
+static int ticks;
+[Tick] static void T() { ticks++; }
+
+public static void Main() {
+    m.Console.WriteLine($"runtime: {Runtime.IsAvailable}");
+    Q16 a = 7.5, b = -2.25;
+    int i = -7, j = 2;
+    m.Console.WriteLine($"q16: {a * b} {a / b}  int: {i / j} {i % j}  sin: {Math.Sin(a)}");
+    NString s = "hello world";
+    m.Console.WriteLine($"indexof: {s.IndexOf("world")} {s.Contains("xyz")}");
+    string who = "Steve";
+    Runtime.Sudo("whitelist on");
+    Runtime.Sudo($"op {who}");
+    int n = 3;
+    Runtime.Sudo($"say {n}");
+}

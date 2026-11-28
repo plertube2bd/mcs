@@ -1,0 +1,5 @@
+[t1] * join Steve
+[t1] ! No score for @s in tut.sprint  ← scoreboard players get @s tut.sprint
+[t3] * stat Steve minecraft.custom:minecraft.sprint_one_cm 250
+[t3] to Steve: 달리기 판정: 250cm
+[t6] * stat Steve minecraft.custom:minecraft.sprint_one_cm 40

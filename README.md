@@ -1,17 +1,19 @@
 # MC# (MCS)
 
-A C#-like language that compiles to a Minecraft datapack (`.mcfunction`).
+A C#-like language that compiles to a Minecraft datapack (`.mcfunction`). Current language version: **MC# 1.0** ([specification](docs/ko/spec.md), `mcs --version`).
 
 - **Front end:** Roslyn (the C# compiler) handles parsing, type checking, and constant folding.
 - **Target:** Minecraft **1.20.1 – 26.3**. The build branches per version (`--mc` / `mcs.json`), and code can branch with `#if MC_1_21_OR_GREATER`. Other versions are a build error.
-- **Dependencies:** none. The output uses only vanilla commands.
+- **Dependencies:** none. The output uses only vanilla commands. Optionally, the [MC# runtime](docs/runtime.md) (`mcs.jar` for Fabric / NeoForge / Paper, 26.1+) adds fast paths, permission level 3–4 commands, `/<ns>:<function>` shortcuts, a debugger and an interpreter.
 
 ## Documentation
 - **Development:** `python3 tests/run.py` runs the test suite in a simulator, and `--real` also on real Minecraft servers ([details](docs/compiling.md#9-tests-and-the-simulator)); `python3 editors/vscode/install.py` installs the VS Code extension (highlighting and errors while you type).
 - [Compiling](docs/compiling.md)
 - [Library reference](docs/libraries.md)
+- [Runtime (mcs.jar)](docs/runtime.md) — the optional server mod: fast paths, `Runtime.Sudo`, shortcuts, debugger, `/mcsi` interpreter
+- [API reference](docs/api.md) — every built-in type, member, default value and enum value (generated from the compiler)
 - [Language guide](docs/language.md) — entity classes, queries, `switch`, `[Inline]`/`Unroll`, tables, `asm $""`
-- 한국어: [컴파일하기](docs/ko/compiling.md) · [라이브러리 레퍼런스](docs/ko/libraries.md) · [언어 가이드](docs/ko/language.md)
+- 한국어: **[튜토리얼](docs/ko/tutorial/README.md)** · **[언어 명세](docs/ko/spec.md)** · [컴파일하기](docs/ko/compiling.md) · [런타임 (mcs.jar)](docs/ko/runtime.md) · [라이브러리 레퍼런스](docs/ko/libraries.md) · [언어 가이드](docs/ko/language.md)
 
 ## Usage
 
@@ -20,6 +22,7 @@ A C#-like language that compiles to a Minecraft datapack (`.mcfunction`).
 ./mcs build examples/mcs.json                # build from a project file
 ./mcs hello.mcs --mc 1.21.4                  # single target version
 ./mcs a.mcs b.mcs -n mypack --emit-csharp    # print the preprocessed C#
+./mcs run hello.mcs --do "0 join Steve"      # build, then run it in the simulator (no Minecraft)
 ```
 
 Needs the .NET 8 SDK (installed at `~/.dotnet`).
@@ -29,7 +32,7 @@ Needs the .NET 8 SDK (installed at `~/.dotnet`).
 ```csharp
 use EntityLib;                       // = using EntityLib;
 
-static int counter = 0;              // static field → scoreboard (keeps its value across reloads)
+static int counter = 0;              // static field → scoreboard (set once; keeps its value across reloads)
 
 [Tick] public static void OnTick() { counter++; }   // #minecraft:tick
 [Load] public static void Init() { }                // #minecraft:load

@@ -28,7 +28,12 @@ public static void Main() {
 
 ## 3. Compiling
 
-There are two ways to build. Both produce the same result.
+There are two ways to build. Both produce the same result. `run` instead of `build` builds and then runs the pack in the simulator ([section 9](#9-tests-and-the-simulator)).
+
+```sh
+./mcs run hello.mcs                       # build + run without Minecraft
+./mcs run --ticks 40 --do "0 join Steve"  # the mcs.json project, 40 ticks, a scripted player
+```
 
 ### a) Project file (`mcs.json`)
 
@@ -56,6 +61,8 @@ There are two ways to build. Both produce the same result.
 | `resources` | Folder copied into the datapack unchanged (worldgen, tags, …) | — |
 | `description` | `pack.mcmeta` description | `MC# datapack: <ns> (...)` |
 | `division` | `csharp`: `/` and `%` like C# (toward zero). `minecraft`: one scoreboard operation, toward −∞ (faster; see [division](language.md#minecraft-division-faster)) | `csharp` |
+| `runtime` | MC# runtime mod (mcs.jar, 26.1+): `optional` (fast paths when installed, a one-time warning when not), `required` (the pack only starts with it; enables `Runtime.Sudo`), `off`. See [runtime](runtime.md) | `optional` |
+| `language` | MC# language version the project needs (`"1.0"`). A newer version than the compiler is an error | — |
 
 ### b) Command line
 
@@ -68,12 +75,18 @@ There are two ways to build. Both produce the same result.
 | `<file.mcs ...>` | Source files. If you pass several files, they compile into one datapack. | (required) |
 | `--mc <version>` / `--mc <min>-<max>` | Target Minecraft version or range | `1.20.1-26.3` |
 | `--division csharp\|minecraft` | How `/` and `%` round (same as `division` in `mcs.json`) | `csharp` |
+| `--runtime optional\|required\|off` | MC# runtime mod dependency (same as `runtime` in `mcs.json`, see [runtime](runtime.md)) | `optional` |
+| `--language <x.y>` | MC# language version the project needs (same as `language` in `mcs.json`) | — |
+| `--version` | Prints the MC# language version and the compiler version | — |
 | `-o`, `--out <dir>` | Output datapack folder | `out/<namespace>` |
 | `-n`, `--namespace <ns>` | Datapack namespace | First file name |
 | `--versions` | Lists supported versions, pack formats, and `#if` symbols | — |
 | `--emit-csharp` | Prints the C# that MC# syntax is converted into (for debugging) | — |
 | `--check` | Only reports errors; writes nothing (used by the editor) | — |
 | `--stdin <file>` | Reads the text of `<file>` from standard input instead of the disk (unsaved editor buffers) | — |
+| `--api-docs` | Prints the built-in API reference ([docs/api.md](api.md)) | — |
+
+Only for `mcs run`: `--ticks <n>` (ticks to simulate), `--do "<tick> <action>"` (scripted action, repeatable), `--format <n>` (pack format layer to run).
 
 ## 4. Target versions and branching
 
@@ -179,7 +192,7 @@ Which overlays appear depends on your code. Branches with identical output are m
 |---|---|
 | Scoreboard objective | `mcs.<ns>` |
 | Local variable | `$<method>.<variable>` (e.g. `$main.sum`) |
-| Static field | `$static.<field>` |
+| Static field | top level: `$static.<field>`; in a class: `$static.<namespace, outer classes, class>.<field>` (e.g. `$static.lamps.state.lit`) |
 | Return value / temporary | `$<method>#ret`, `$<method>#t0` |
 | Entity variable tag | `mcs.<ns>.<method>.<variable>` |
 | Storage | `<ns>:mcs` |
@@ -244,7 +257,7 @@ python3 tools/mcsim.py out/hello --ticks 100
 - **Simulated:** scoreboards (32-bit wraparound, floor division), data storage and function macros, `compute` (26.3: 32-bit float math and the game's sine table, bit-for-bit), `function` / `schedule` / `#tick` / `#load`, `execute` (`if`/`unless score|entity|data`, `as`, `store …`), `tellraw` / `say`, a small entity model (`summon`, `tag`, `kill`, selectors with `type=`, `tag=`, `name=`, `scores=`, `limit=`), and scripted players. `maxCommandChainLength` is enforced, so endless loops show up.
 - **Not simulated:** blocks, positions, entity NBT (players exist only when scripted). Such commands are printed as `> <command>`, so the output doubles as a trace. Commands that Minecraft would reject print as `! <error>`.
 - Tick order follows the game: `#tick` functions first, then scheduled functions.
-- **Scripted players** (`--do "TICK ACTION"` or `// @do` in tests; tick 0 = before load): `join NAME`, `leave NAME`, `die NAME`, `respawn NAME`, `kill NAME` (NAME killed something), `use NAME ITEM`, `stat NAME CRITERION [N]`, `trigger NAME OBJECTIVE [set|add N]`, `click NAME` (right-click with the held item), `hold NAME SLOT`, `offhand NAME SLOT`. Players have inventories (`/give` fills them; `if items` and `nbt={SelectedItem:…}` read them). Statistics update every objective with that criterion, `/trigger` needs `enable`, `@e` skips dead players, and messages to specific players print as `to Steve: …`.
+- **Scripted players** (`--do "TICK ACTION"` or `// @do` in tests; tick 0 = before load): `reload` (runs `#load` again, keeping scores, storage and schedules), `join NAME`, `leave NAME`, `die NAME`, `respawn NAME`, `kill NAME` (NAME killed something), `use NAME ITEM`, `stat NAME CRITERION [N]`, `trigger NAME OBJECTIVE [set|add N]`, `click NAME` (right-click with the held item), `hold NAME SLOT`, `offhand NAME SLOT`. Players have inventories (`/give` fills them; `if items` and `nbt={SelectedItem:…}` read them). Statistics update every objective with that criterion, `/trigger` needs `enable`, `@e` skips dead players, and messages to specific players print as `to Steve: …`.
 
 ### Real Minecraft servers
 

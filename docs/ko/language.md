@@ -381,6 +381,30 @@ use PlayerLib;
 | `Exec.At(pos, () => { ... })` | 해당 위치에서 실행 (좌표에 실행 중 값 사용 가능) |
 | `new Position(x, y, z)` | 좌표에 실행 중 값 사용 가능 (매크로) |
 
+## Execute 체인
+
+`Execute`로 `/execute` 명령어 하나를 메서드 체인으로 만듭니다. 체인 전체를 한 문장으로 쓰고 `.Run(...)`(람다 또는 매개변수 없는 static 메서드)으로 끝냅니다:
+
+```csharp
+Execute.AsPlayerObject(Player.All)
+    .At(Player.Self)
+    .UnlessBlock("air", Position.Here.Offset(0, -1, 0))
+    .Run(() => { Player.Self.SendMessage("땅 위에 있음"); });
+// execute as @a at @s unless block ~ ~-1 ~ minecraft:air run tellraw @s ...
+```
+
+| 단계 | 하위 명령 |
+|---|---|
+| `As(target)` / `AsPlayerObject(players)` | `as` — 안쪽 코드에서 각 대상이 `@s`(`Player.Self`)가 됨 |
+| `At(target)` / `At(pos)` / `Positioned(pos)` | `at` / `positioned` (좌표에 실행 중 값 사용 가능) |
+| `In(Dimension.Nether)`, `Rotated(yaw, pitch)`, `RotatedAs(target)`, `Facing(pos)`, `Facing(target)`, `AnchoredEyes()`, `Align("xz")` | 해당 하위 명령 |
+| `IfBlock(id, pos)` / `UnlessBlock(id, pos)` (Block 객체는 `IfBlockObject` / `UnlessBlockObject`) | `if/unless block` |
+| `IfEntity(target)` / `UnlessEntity(target)` | `if/unless entity` |
+| `If(cond)` / `Unless(cond)` | 임의의 MC# bool. 체인의 그 지점에서 검사 (`As` 뒤라면 대상마다) |
+| `Sub("하위 명령")` | 그대로 출력 |
+
+대상은 Entity, 엔티티 참조(`Player.All`, 엔티티 클래스 객체) 또는 선택자 문자열입니다. 체인 밖의 엔티티 참조는 `Run` 안에서도 같은 엔티티를 가리킵니다. 어떤 단계가 자체 명령을 필요로 하면(실행 중 값의 `If`, 엔티티 위치 기준 블록 검사, 엔티티 쿼리) 나머지 체인을 하위 함수로 옮겨 그 명령이 올바른 컨텍스트에서 실행되게 합니다.
+
 ## 명령어를 실행하는 채팅 버튼
 
 `new Button("[건설]", "trigger war.act set 3")`은 지정한 명령어를 실행하는 버튼을 만듭니다. `new Button(label, Method)`는 MC# 메서드를 호출하는 버튼을 만듭니다.

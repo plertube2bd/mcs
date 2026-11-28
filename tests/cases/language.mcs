@@ -1,0 +1,9 @@
+// MC# language version: #if MCS_1_0_OR_GREATER (docs/ko/spec.md 6.2)
+// @args --language 1.0
+public static void Main() {
+#if MCS_1_0_OR_GREATER
+    m.Console.WriteLine("MC# 1.0");
+#else
+    m.Console.WriteLine("older");
+#endif
+}

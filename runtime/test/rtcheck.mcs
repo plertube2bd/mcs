@@ -1,0 +1,40 @@
+// MC# runtime integration test (runtime/test/realtest.py): results must not depend on whether mcs.jar is installed.
+use MathLib;
+
+static int counter;
+static Q16 qa = 7.5, qb = -2.25;
+static Milli ma = 3.25f, mb = -0.4f;
+static int ia = -7, ib = 2;
+static Q16 qmul, qdiv, sinv, cosv, tanv;
+static Milli mmul, mdiv;
+static int idiv, irem, idx, sumQ, sumM, sumI, sumT;
+static bool avail;
+static NString text = "hello world";
+
+[Tick] static void Tick() { counter++; }
+
+public static int Add(int a, int b) => a + b;
+public static Q16 Half(Q16 x) => x / 2;
+public static void Hello() { asm say hello-shortcut; }
+
+public static void Main() {
+    avail = Runtime.IsAvailable;
+    qmul = qa * qb; qdiv = qa / qb;
+    mmul = ma * mb; mdiv = ma / mb;
+    idiv = ia / ib; irem = ia % ib;
+    sinv = Math.Sin(qa); cosv = Math.Cos(qb); tanv = Math.Tan(qa);
+    idx = text.IndexOf("world");
+    // checksums over many inputs (both signs, small and large)
+    for (int i = -12; i <= 12; i++) {
+        Q16 x = i * 0.737 + qa;
+        Q16 y = i * -1.31 + qb;
+        sumQ += (int)((x * y) * 100) + (int)((x / (y + 0.5)) * 100);
+        sumT += (int)(Math.Sin(x) * 10000) + (int)(Math.Cos(y) * 10000) + (int)(Math.Tan(x * 0.1) * 1000);
+        Milli u = i * 0.25f + ma;
+        Milli v = i * -0.75f + mb;
+        sumM += (int)((u * v) * 100) + (int)((u / (v + 0.1f)) * 100);
+        int p = i * 977 + ia, q = i * 13 + ib + 1;
+        if (q != 0) sumI += p / q + p % q;
+    }
+    asm say rtcheck-done;
+}

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>mcs</AssemblyName>
     <Nullable>enable</Nullable>
+    <!-- MC# language version (Language in Versions.cs) -->
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,6 +16,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Data/mcdata.json" LogicalName="mcdata.json" />
+    <!-- the simulator ships with the compiler for `mcs run` -->
+    <None Include="../../tools/mcsim.py" Link="tools/mcsim.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

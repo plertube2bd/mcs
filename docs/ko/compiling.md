@@ -28,7 +28,12 @@ public static void Main() {
 
 ## 3. 컴파일
 
-빌드 방법은 두 가지이고, 결과는 같습니다.
+빌드 방법은 두 가지이고, 결과는 같습니다. `build` 대신 `run`을 쓰면 빌드한 뒤 바로 시뮬레이터로 실행합니다 ([9절](#9-테스트와-시뮬레이터), [튜토리얼 8](tutorial/08-testing.md)).
+
+```sh
+./mcs run hello.mcs                       # 빌드 + 게임 없이 실행
+./mcs run --ticks 40 --do "0 join Steve"  # mcs.json 프로젝트, 40틱, 대본 플레이어
+```
 
 ### a) 프로젝트 파일 (`mcs.json`)
 
@@ -56,6 +61,8 @@ public static void Main() {
 | `resources` | 데이터팩에 그대로 복사할 폴더 (월드 생성, 태그 등) | — |
 | `description` | `pack.mcmeta` 설명 | `MC# datapack: <ns> (...)` |
 | `division` | `csharp`: `/`와 `%`가 C#과 같음(0 방향). `minecraft`: 스코어보드 연산 하나, 음의 무한대 방향(더 빠름, [나눗셈](language.md#마인크래프트-나눗셈-더-빠름) 참고) | `csharp` |
+| `runtime` | MC# 런타임 모드(mcs.jar, 26.1+): `optional`(설치되어 있으면 빠른 경로, 없으면 경고 한 번), `required`(모드가 있어야 팩이 시작됨, `Runtime.Sudo` 사용 가능), `off`. [런타임](runtime.md) 참고 | `optional` |
+| `language` | 프로젝트가 요구하는 MC# 언어 버전 (`"1.0"`). 컴파일러보다 높으면 오류 | — |
 
 ### b) 명령줄
 
@@ -68,12 +75,18 @@ public static void Main() {
 | `<file.mcs ...>` | 소스 파일. 여러 개를 넘기면 하나의 데이터팩으로 묶입니다. | (필수) |
 | `--mc <버전>` / `--mc <최소>-<최대>` | 대상 마인크래프트 버전 또는 범위 | `1.20.1-26.3` |
 | `--division csharp\|minecraft` | `/`와 `%`의 반올림 방식 (`mcs.json`의 `division`과 같음) | `csharp` |
+| `--runtime optional\|required\|off` | MC# 런타임 모드 의존성 (`mcs.json`의 `runtime`과 같음, [런타임](runtime.md) 참고) | `optional` |
+| `--language <x.y>` | 프로젝트가 요구하는 MC# 언어 버전 (`mcs.json`의 `language`와 같음) | — |
+| `--version` | MC# 언어 버전과 컴파일러 버전 출력 | — |
 | `-o`, `--out <dir>` | 출력할 데이터팩 폴더 | `out/<네임스페이스>` |
 | `-n`, `--namespace <ns>` | 데이터팩 네임스페이스 | 첫 번째 파일 이름 |
 | `--versions` | 지원 버전, 팩 포맷, `#if` 심볼 목록 출력 | — |
 | `--emit-csharp` | MC# 문법이 변환된 C# 코드 출력 (디버깅용) | — |
 | `--check` | 에러만 확인하고 아무것도 쓰지 않음 (에디터용) | — |
 | `--stdin <file>` | `<file>`의 내용을 디스크 대신 표준입력에서 읽음 (저장 안 한 에디터 내용) | — |
+| `--api-docs` | 내장 API 레퍼런스([docs/api.md](../api.md))를 출력 | — |
+
+`mcs run`에서만 쓰는 옵션: `--ticks <n>` (실행할 틱 수), `--do "<틱> <행동>"` (대본 행동, 여러 번 가능), `--format <n>` (실행할 팩 포맷 층).
 
 ## 4. 대상 버전과 분기
 
@@ -179,7 +192,7 @@ out/hello/
 |---|---|
 | 스코어보드 objective | `mcs.<ns>` |
 | 지역 변수 | `$<메서드>.<변수>` (예: `$main.sum`) |
-| static 필드 | `$static.<필드>` |
+| static 필드 | 최상위: `$static.<필드>`, 클래스 안: `$static.<네임스페이스·바깥 클래스·클래스>.<필드>` (예: `$static.lamps.state.lit`) |
 | 반환값 / 임시값 | `$<메서드>#ret`, `$<메서드>#t0` |
 | Entity 변수 태그 | `mcs.<ns>.<메서드>.<변수>` |
 | 스토리지 | `<ns>:mcs` |

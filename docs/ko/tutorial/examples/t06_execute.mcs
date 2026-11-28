@@ -1,0 +1,31 @@
+// 튜토리얼 6: Execute로 맥락 바꾸기
+// @do 0 join Steve
+// @do 0 join Alex
+use PlayerLib;
+
+static int greeted;
+
+public static void Main()
+{
+    Wait(1);                                                  // 플레이어가 들어온 뒤
+    Player.Named("Steve").AddTag("vip");
+
+    // 서버 맥락(@s 없음)에서 각 플레이어를 @s로 바꿔 실행
+    Execute.AsPlayerObject(Player.All).Run(() =>
+    {
+        greeted++;
+        Player.Self.SendMessage("안녕!");                     // 이제 @s가 있다
+    });
+    m.Console.WriteLine($"인사한 수: {greeted}");
+
+    // As 뒤의 조건은 플레이어마다 검사된다
+    Execute.AsPlayerObject(Player.All)
+        .If(Player.Self.HasTag("vip"))
+        .Run(() => { Player.Self.SendMessage("VIP 전용 메시지"); });
+
+    // 위치도 바꿀 수 있다: 각 플레이어 발밑이 공기가 아니면
+    Execute.AsPlayerObject(Player.All)
+        .At(Player.Self)
+        .UnlessBlock("air", Position.Here.Offset(0, -1, 0))
+        .Run(() => { Player.Self.SendMessage("땅 위에 서 있음"); });
+}

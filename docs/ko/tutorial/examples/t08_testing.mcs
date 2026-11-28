@@ -1,0 +1,16 @@
+// 튜토리얼 8: 게임 밖에서 로직 검사하기
+[Inline] static void Expect(string name, int actual, int expected)
+{
+    if (actual == expected) m.Console.WriteLine($"ok   {name}");
+    else m.Console.WriteLine($"FAIL {name}: {actual} (기대값 {expected})");
+}
+
+static int Clamp(int v, int lo, int hi) => v < lo ? lo : v > hi ? hi : v;
+
+public static void Main()
+{
+    Expect("가운데", Clamp(5, 0, 10), 5);
+    Expect("아래", Clamp(-3, 0, 10), 0);
+    Expect("위", Clamp(99, 0, 10), 10);
+    Expect("나눗셈", -7 / 2, -3);
+}

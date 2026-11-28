@@ -1,0 +1,69 @@
+// Regressions for bugs found by users.
+// @real load
+use EntityLib;
+
+[Entity("minecraft:marker", "rg.m")]
+public partial class Mk : EntityObject { [Score("rg.hp")] public int Hp; }
+
+// 1. Spawn / Merge used to strip every trailing '}' of the SNBT, so nested compounds lost their end.
+// 2. NArray fields changed inside an instance method (Add, RemoveAt, a helper call) were not copied back.
+class Bag {
+    public NArray<int> Items = new NArray<int>();
+    public int Puts;
+    public void Put(int x) { Items.Add(x); }
+    public void Drop() { Items.RemoveAt(0); }
+    public void Twice(int x) { Put(x); Put(x); }
+    public void Fill() { AddTo(Items, 7); }
+    static void AddTo(NArray<int> a, int v) { a.Add(v); }
+}
+
+// 3. Static fields of equally named nested classes shared one score ($static.state.lit).
+static class State { public static int lit = 0; }
+static class Lamps { public static class State { public static int lit = 1; } }
+static class Doors { public static class State { public static int lit = 2; } }
+
+// 6. Constant Milli / Q16 arguments of [Inline] methods were written into commands as raw scores (370, not 0.37).
+[Inline] static void Say(Milli v, Q16 q, bool on) { asm $"say {v} {q} {on} {v * 2}"; }
+
+class Shelf { public Bag Left = new Bag(); public void Stock() { Left.Put(1); } }
+
+public static void Main() {
+    var e = Entities.Spawn<Mk>(Position.Here, "{data:{a:{b:1}}}");
+    e.Merge("{data:{c:{d:2}}}");
+
+    var b = new Bag();
+    b.Put(3); b.Put(4);
+    m.Console.WriteLine($"put {b.Items}");
+    b.Drop();
+    m.Console.WriteLine($"drop {b.Items}");
+    b.Twice(5);
+    m.Console.WriteLine($"twice {b.Items}");
+    b.Fill();
+    m.Console.WriteLine($"helper {b.Items}");
+
+    var s = new Shelf();
+    s.Stock();
+    m.Console.WriteLine($"nested {s.Left.Items}");
+
+    // 4. Reading an entity score that has no value kept the variable's previous value (operation = fails).
+    var m1 = Entities.Spawn<Mk>(Position.Here);
+    m1.Hp = 42;
+    int seen = m1.Hp;
+    var m2 = Entities.Spawn<Mk>(Position.Here);
+    seen = m2.Hp;                                     // m2 has no rg.hp score
+    m.Console.WriteLine($"unset reads {seen}");
+    //    …and comparisons with it were false both ways (== 0 false, != 0 true); x *= it kept x.
+    int prod = 6;
+    prod *= m2.Hp;
+    m.Console.WriteLine($"unset compares {m2.Hp == 0} {m2.Hp != 0} {m2.Hp < 5} {m2.Hp >= 0} {m1.Hp > m2.Hp} prod={prod}");
+
+    // 5. Milli × and ÷ multiplied the raw ×1000 values first and overflowed above ~2147 (even x * 2).
+    Milli big = 3000f, side = 47f, half = 0.5f;
+    m.Console.WriteLine($"milli {big * 2} {side * side} {big / 3} {big / half} {-big * 1.5f} {big / 0}");
+
+    Say(0.37f, 0.15, true);
+    foreach (int i in Unroll.Range(1, 3)) asm $"say step {i * 0.25f}";
+
+    Lamps.State.lit += 10;
+    m.Console.WriteLine($"statics {State.lit} {Lamps.State.lit} {Doors.State.lit}");
+}

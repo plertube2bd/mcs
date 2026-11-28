@@ -1,0 +1,7 @@
+// "runtime": "required": Runtime.Sudo runs permission level 4 commands.
+public static void Main() {
+    Runtime.Sudo("ban-ip 10.11.12.13");
+    int n = 7;
+    Runtime.Sudo($"say sudo-{n}");
+    asm say rtsudo-done;
+}

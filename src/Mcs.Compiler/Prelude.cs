@@ -246,6 +246,81 @@ public static class Prelude
                 [Intrinsic("exec.at")] public static void At(Position pos, System.Action action) { }
             }
 
+            /// The MC# runtime mod (mcs.jar, Minecraft 26.1+). See "runtime" in mcs.json.
+            public static class Runtime
+            {
+                /// Is the runtime mod installed on this server? (always false below 26.1 or with "runtime": "off")
+                [Intrinsic("rt.available")] public static bool IsAvailable => false;
+                /// Runs a command with the mod's permission level 4 (op, ban, whitelist, stop …). Needs
+                /// "runtime": "required". The command may contain runtime values ($"whitelist add {name}").
+                [Intrinsic("rt.sudo")] public static void Sudo(string command) { }
+            }
+
+            /// A fluent /execute: Execute.AsPlayerObject(p).At(p).IfBlock("stone", pos).Run(() => { ... }).
+            /// Write the whole chain in one statement ending with .Run(...). Targets are an Entity, an entity
+            /// reference (Player.All, an entity class) or a selector string.
+            public static class Execute
+            {
+                /// as <target>: runs for each target as @s.
+                [Intrinsic("xc.as")] public static ExecuteChain As(object target) => default;
+                /// as <players>: runs for each player as @s.
+                [Intrinsic("xc.as")] public static ExecuteChain AsPlayerObject(PlayerLib.Player players) => default;
+                /// at <target>: the position, rotation and dimension of each target.
+                [Intrinsic("xc.at")] public static ExecuteChain At(object target) => default;
+                /// The position (and its dimension).
+                [Intrinsic("xc.pos")] public static ExecuteChain At(Position pos) => default;
+                [Intrinsic("xc.pos")] public static ExecuteChain Positioned(Position pos) => default;
+                [Intrinsic("xc.in")] public static ExecuteChain In(WorldLib.Dimension dimension) => default;
+                [Intrinsic("xc.facing")] public static ExecuteChain Facing(Position pos) => default;
+                [Intrinsic("xc.facingent")] public static ExecuteChain Facing(object target) => default;
+                [Intrinsic("xc.rotated")] public static ExecuteChain Rotated(float yaw, float pitch) => default;
+                [Intrinsic("xc.rotatedas")] public static ExecuteChain RotatedAs(object target) => default;
+                [Intrinsic("xc.eyes")] public static ExecuteChain AnchoredEyes() => default;
+                /// align <axes> ("xyz", "xz", ...).
+                [Intrinsic("xc.align")] public static ExecuteChain Align(string axes) => default;
+                [Intrinsic("xc.ifblock")] public static ExecuteChain IfBlock(string id, Position pos) => default;
+                [Intrinsic("xc.ifblockobj")] public static ExecuteChain IfBlockObject(BlockLib.Block block, Position pos) => default;
+                [Intrinsic("xc.unlessblock")] public static ExecuteChain UnlessBlock(string id, Position pos) => default;
+                [Intrinsic("xc.unlessblockobj")] public static ExecuteChain UnlessBlockObject(BlockLib.Block block, Position pos) => default;
+                /// if entity <target>: continues if the target exists.
+                [Intrinsic("xc.ifentity")] public static ExecuteChain IfEntity(object target) => default;
+                [Intrinsic("xc.unlessentity")] public static ExecuteChain UnlessEntity(object target) => default;
+                /// Continues if the condition is true (checked at this point of the chain, e.g. once per As target).
+                [Intrinsic("xc.if")] public static ExecuteChain If(bool condition) => default;
+                [Intrinsic("xc.unless")] public static ExecuteChain Unless(bool condition) => default;
+                /// Raw execute subcommands ("anchored eyes positioned ^ ^ ^1").
+                [Intrinsic("xc.raw")] public static ExecuteChain Sub(string subcommands) => default;
+            }
+
+            /// The rest of an Execute chain (see Execute). End it with .Run(...).
+            public struct ExecuteChain
+            {
+                [Intrinsic("xc.as")] public ExecuteChain As(object target) => default;
+                [Intrinsic("xc.as")] public ExecuteChain AsPlayerObject(PlayerLib.Player players) => default;
+                [Intrinsic("xc.at")] public ExecuteChain At(object target) => default;
+                [Intrinsic("xc.pos")] public ExecuteChain At(Position pos) => default;
+                [Intrinsic("xc.pos")] public ExecuteChain Positioned(Position pos) => default;
+                [Intrinsic("xc.in")] public ExecuteChain In(WorldLib.Dimension dimension) => default;
+                [Intrinsic("xc.facing")] public ExecuteChain Facing(Position pos) => default;
+                [Intrinsic("xc.facingent")] public ExecuteChain Facing(object target) => default;
+                [Intrinsic("xc.rotated")] public ExecuteChain Rotated(float yaw, float pitch) => default;
+                [Intrinsic("xc.rotatedas")] public ExecuteChain RotatedAs(object target) => default;
+                [Intrinsic("xc.eyes")] public ExecuteChain AnchoredEyes() => default;
+                [Intrinsic("xc.align")] public ExecuteChain Align(string axes) => default;
+                [Intrinsic("xc.ifblock")] public ExecuteChain IfBlock(string id, Position pos) => default;
+                [Intrinsic("xc.ifblockobj")] public ExecuteChain IfBlockObject(BlockLib.Block block, Position pos) => default;
+                [Intrinsic("xc.unlessblock")] public ExecuteChain UnlessBlock(string id, Position pos) => default;
+                [Intrinsic("xc.unlessblockobj")] public ExecuteChain UnlessBlockObject(BlockLib.Block block, Position pos) => default;
+                [Intrinsic("xc.ifentity")] public ExecuteChain IfEntity(object target) => default;
+                [Intrinsic("xc.unlessentity")] public ExecuteChain UnlessEntity(object target) => default;
+                [Intrinsic("xc.if")] public ExecuteChain If(bool condition) => default;
+                [Intrinsic("xc.unless")] public ExecuteChain Unless(bool condition) => default;
+                [Intrinsic("xc.raw")] public ExecuteChain Sub(string subcommands) => default;
+                /// Runs the lambda (or a parameterless static method) in the chain's context.
+                [Intrinsic("xc.run")] public void Run(System.Action action) { }
+            }
+
+            /// Global functions: call them without a class name (Wait(20), GetWorldSpawn()).
             public static class Builtins
             {
                 [Intrinsic("asm")] public static void __asm(string commands) { }
@@ -385,11 +460,13 @@ public static class Prelude
 
             public static class Sound
             {
-                /// Plays a sound at a position for every player in range.
+                /// Plays a sound at `pos`, heard by every player in range of it
+                /// (playsound <sound> <source> @a <pos> <volume> <pitch>).
                 [MCS.Intrinsic("sound.play")] public static void Play(string sound, MCS.Position pos, float volume = 1, float pitch = 1, SoundSource source = SoundSource.Master) { }
-                /// Plays a sound to players, at their own position.
+                /// Plays a sound to each of `players` at that player's own position, so it is heard at full volume
+                /// wherever they are and by nobody else (execute as <players> at @s run playsound … @s ~ ~ ~).
                 [MCS.Intrinsic("sound.playto")] public static void PlayTo(PlayerLib.Player players, string sound, float volume = 1, float pitch = 1, SoundSource source = SoundSource.Master) { }
-                /// Stops a sound (or every sound) for players.
+                /// Stops a sound (or every sound, `sound` = null) in every category for players.
                 [MCS.Intrinsic("sound.stop")] public static void Stop(PlayerLib.Player players, string sound = null) { }
             }
         }

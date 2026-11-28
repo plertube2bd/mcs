@@ -1,0 +1,13 @@
+// 튜토리얼 7: 컴파일 타임 코드 — 형광등 8개 끄기
+static readonly int[] LampX = { 3, 7, 11, 15, 19, 23, 27, 31 };
+
+[Inline] static void Lamp(int x, bool on)
+{
+    string block = on ? "sea_lantern" : "gray_stained_glass";
+    asm $"fill {x} 70 10 {x} 70 12 minecraft:{block}";
+}
+
+public static void Main()
+{
+    foreach (int x in LampX) Lamp(x, false);
+}

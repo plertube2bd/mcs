@@ -1,0 +1,3 @@
+// @args --language 9.0
+public static void Main() { }
+// @error This project needs MC# 9.0, but this compiler implements MC# 1.0

@@ -497,6 +497,7 @@ public sealed partial class Codegen
                 return StoreT("result", $"if entity @e[team={t.Name}]");
             }
             case "ex.exists": return StoreT("success", $"if entity {AnySel(ma!.Expression)}");
+            case "rt.available": return RuntimeAvailable();
             case "nstr.length": return StrLength(StrPath(ma!.Expression));
             case "nstr.isempty": { var l = StrLength(StrPath(ma!.Expression)); return StoreT("success", $"if score {Holder(l)} matches 0"); }
             case "narr.length":

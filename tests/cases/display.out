@@ -154,6 +154,38 @@
 [t0] > data modify entity @e[tag=mcs.display.main.gem,limit=1] item set value {id:"minecraft:diamond",count:1}
 [t0] > data modify entity @e[tag=mcs.display.main.gem,limit=1] item_display set value "ground"
 [t0] > data modify entity @e[tag=mcs.display.main.gem,limit=1] teleport_duration set value 5
+=== format 101 ===
+[t0] > forceload add ~ ~
+[t0] > summon minecraft:text_display ~ ~ ~ {Tags:["mcs.display.main.label"]}
+[t0] > data modify entity @e[tag=mcs.display.main.label,limit=1] text set value {"text":"Hello"}
+[t0] > data modify entity @e[tag=mcs.display.main.label,limit=1] billboard set value "center"
+[t0] > data modify entity @e[tag=mcs.display.main.label,limit=1] background set value 1073741824
+[t0] > data modify entity @e[tag=mcs.display.main.label,limit=1] text_opacity set value -56b
+[t0] > data modify entity @e[tag=mcs.display.main.label,limit=1] shadow set value 1b
+[t0] > data modify entity @e[tag=mcs.display.main.label,limit=1] text set value ["",{"text":"Score: "},{"text":"42"},{"text":"  speed="},{"text":""},{"text":"1"},{"text":"."},{"text":"2"},{"text":"5"},{"text":"0"},{"text":"0"},{"text":"0"},{"text":" ok="},{"text":"True"}]
+[t0] > data modify entity @e[tag=mcs.display.main.label,limit=1] alignment set value "left"
+[t0] > summon minecraft:block_display ~ ~ ~ {Tags:["mcs.display.main.cube"]}
+[t0] > data modify entity @e[tag=mcs.display.main.cube,limit=1] block_state set value {Name:"minecraft:oak_stairs",Properties:{facing:"east"}}
+[t0] > data modify entity @e[tag=mcs.display.main.cube,limit=1] transformation.scale set value [0.5f,0.5f,0.5f]
+[t0] > data modify entity @e[tag=mcs.display.main.cube,limit=1] brightness set value {block:15,sky:15}
+[t0] > data modify entity @e[tag=mcs.display.main.cube,limit=1] transformation.left_rotation set value {angle:0.785398163f,axis:[0f,1f,0f]}
+[t0] > execute store result entity @e[tag=mcs.display.main.cube,limit=1] transformation.scale[0] float 0.001 run scoreboard players get $main.s mcs.display
+[t0] > execute store result entity @e[tag=mcs.display.main.cube,limit=1] transformation.scale[1] float 0.001 run scoreboard players get $main.s mcs.display
+[t0] > execute store result entity @e[tag=mcs.display.main.cube,limit=1] transformation.scale[2] float 0.001 run scoreboard players get $main.s mcs.display
+[t0] > data modify entity @e[tag=mcs.display.main.cube,limit=1] transformation.left_rotation set value {angle:1.570796326794897f,axis:[0f,1f,0f]}
+[t0] > data modify entity @e[tag=mcs.display.main.cube,limit=1] start_interpolation set value 0
+[t0] > data modify entity @e[tag=mcs.display.main.cube,limit=1] interpolation_duration set value 20
+[t0] > data modify entity @e[tag=mcs.display.main.cube,limit=1] block_state set value {Name:"minecraft:stone"}
+[t0] > data get entity @e[tag=mcs.display.main.cube,limit=1] transformation.scale[0] 1000
+[t0] scale read back: 2.000
+[t0] > summon minecraft:item_display ~ ~1 ~ {Tags:["mcs.display.main.clone"]}
+[t0] > data modify entity @e[tag=mcs.display.main.clone,limit=1] item set value {id:"minecraft:diamond",count:1}
+[t0] > data modify entity @e[tag=mcs.display.main.clone,limit=1] item_display set value "ground"
+[t0] > data modify entity @e[tag=mcs.display.main.clone,limit=1] teleport_duration set value 5
+[t0] > summon minecraft:item_display ~ ~ ~ {Tags:["mcs.display.main.gem"]}
+[t0] > data modify entity @e[tag=mcs.display.main.gem,limit=1] item set value {id:"minecraft:diamond",count:1}
+[t0] > data modify entity @e[tag=mcs.display.main.gem,limit=1] item_display set value "ground"
+[t0] > data modify entity @e[tag=mcs.display.main.gem,limit=1] teleport_duration set value 5
 === format 121 ===
 [t0] > forceload add ~ ~
 [t0] > summon minecraft:text_display ~ ~ ~ {Tags:["mcs.display.main.label"]}

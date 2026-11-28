@@ -1,0 +1,7 @@
+[t0] loads=1 energy=90 local=1
+[t1] * reload
+[t1] ! An objective already exists by the name mcs.t02_lifetime  ← scoreboard objectives add mcs.t02_lifetime dummy
+[t1] loads=2 energy=90 local=1
+[t2] * reload
+[t2] ! An objective already exists by the name mcs.t02_lifetime  ← scoreboard objectives add mcs.t02_lifetime dummy
+[t2] loads=3 energy=90 local=1

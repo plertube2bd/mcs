@@ -40,6 +40,22 @@
       ],
       "default": "csharp",
       "description": "How / and % round: csharp (toward zero, like C#) or minecraft (one scoreboard operation, toward −∞ — faster)"
+    },
+    "runtime": {
+      "type": "string",
+      "enum": [
+        "optional",
+        "required",
+        "off"
+      ],
+      "default": "optional",
+      "description": "MC# runtime mod (mcs.jar, Minecraft 26.1+): optional (fast paths when installed, a one-time warning when not), required (the pack only starts with it; enables Runtime.Sudo) or off"
+    },
+    "language": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "default": "1.0",
+      "description": "MC# language version this project needs, e.g. \"1.0\" (a newer version than the compiler is an error)"
     }
   },
   "required": [

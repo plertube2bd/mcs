@@ -1,0 +1,19 @@
+// 튜토리얼 3: 실행 순서 확인하기
+// @do 1 join Steve
+// @do 3 stat Steve minecraft.custom:minecraft.sprint_one_cm 250
+// @do 6 stat Steve minecraft.custom:minecraft.sprint_one_cm 40
+// @ticks 8
+use PlayerLib;
+use TeamLib;
+
+static Objective sprint = new Objective("tut.sprint", "minecraft.custom:minecraft.sprint_one_cm");
+
+[Tick] static void Check()
+{
+    foreach (var p in Entities.All<Player>())
+    {
+        int cm = sprint[Player.Self];
+        if (cm >= 200) Player.Self.SendMessage($"달리기 판정: {cm}cm");
+        sprint[Player.Self] = 0;   // 판정한 다음에 0으로 되돌린다
+    }
+}

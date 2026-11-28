@@ -8,11 +8,13 @@ public sealed class CompiledPack
     public List<string> LoadTag { get; } = new();
     public List<string> TickTag { get; } = new();
     public Dictionary<string, string> Advancements { get; } = new();   // <ns>:<path> → JSON
+    public Dictionary<string, string> DataFiles { get; } = new();      // path under data/ → text (e.g. <ns>/mcs/symbols.json)
 
     public bool SameAs(CompiledPack o) =>
         LoadTag.SequenceEqual(o.LoadTag) && TickTag.SequenceEqual(o.TickTag)
         && Functions.Count == o.Functions.Count
         && Advancements.Count == o.Advancements.Count && Advancements.All(kv => o.Advancements.TryGetValue(kv.Key, out var j) && j == kv.Value)
+        && DataFiles.Count == o.DataFiles.Count && DataFiles.All(kv => o.DataFiles.TryGetValue(kv.Key, out var d) && d == kv.Value)
         && Functions.All(kv => o.Functions.TryGetValue(kv.Key, out var l) && l.SequenceEqual(kv.Value));
 }
 
@@ -76,6 +78,12 @@ public static class DatapackWriter
                 string file = Path.Combine(root, "data", path[..idx], advDir, path[(idx + 1)..] + ".json");
                 Directory.CreateDirectory(Path.GetDirectoryName(file)!);
                 File.WriteAllText(file, json + "\n");
+            }
+            foreach (var (path, text) in layer.Pack.DataFiles)
+            {
+                string file = Path.Combine(root, "data", path);
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                File.WriteAllText(file, text);
             }
             string tagDir = Path.Combine(root, "data", "minecraft", "tags", layer.FunctionDir);
             Directory.CreateDirectory(tagDir);

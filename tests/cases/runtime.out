@@ -1,0 +1,20 @@
+=== format 101 ===
+[t0] runtime: True
+[t0] q16: -16.87500 -3.33332  int: -3 -1  sin: 0.93798
+[t0] indexof: 6 False
+[t0] > [sudo] whitelist on
+[t0] > whitelist on
+[t0] > [sudo] op Steve
+[t0] > op Steve
+[t0] > [sudo] say 3
+[t0] [Server] 3
+=== format 121 ===
+[t0] runtime: True
+[t0] q16: -16.87500 -3.33332  int: -3 -1  sin: 0.93800
+[t0] indexof: 6 False
+[t0] > [sudo] whitelist on
+[t0] > whitelist on
+[t0] > [sudo] op Steve
+[t0] > op Steve
+[t0] > [sudo] say 3
+[t0] [Server] 3

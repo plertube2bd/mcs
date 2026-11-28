@@ -1,0 +1,7 @@
+// "runtime": "required" on a server without the mod: the pack does not start, [Tick] methods return at once.
+// @mc 26.1-26.3
+// @args --runtime required
+// @ticks 3
+static int ticks;
+[Tick] static void T() { ticks++; m.Console.WriteLine("tick"); }
+public static void Main() { m.Console.WriteLine("started"); }

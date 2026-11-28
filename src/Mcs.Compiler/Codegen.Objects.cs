@@ -60,7 +60,7 @@ public sealed partial class Codegen
         {
             var item = CreateItem(model, oc, $"{ns}:{Snake(f.Name)}", false);
             itemStatics[f] = item;
-            staticItemFlags[item] = H($"$static.{f.Name}#used");
+            staticItemFlags[item] = H($"$static.{StaticPrefix(f)}{f.Name}#used");
         }
         catch (UnsupportedException e) { Error(e.Node, e.Message); }
     }

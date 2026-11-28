@@ -1,0 +1,11 @@
+use PlayerLib;
+public static void Main() {
+    Execute.AsPlayerObject(Player.All).At(Player.Self);
+    var chain = Execute.As(Player.All);
+    chain.Run(() => { });
+    Execute.Facing(Player.Self.Position.Offset(0, 1, 0)).Run(() => { });
+}
+// @error An Execute chain must end with .Run(...)
+// @error Unsupported variable type: MCS.ExecuteChain
+// @error Write an Execute chain in one expression
+// @error Facing needs an absolute position

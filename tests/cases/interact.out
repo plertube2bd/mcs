@@ -128,3 +128,47 @@
 [t0] pong
 [t0] pong
 [t0] s=5 q=49 open=False
+=== format 101 ===
+[t0] > forceload add ~ ~
+[t0] > summon minecraft:zombie ~ ~ ~ {Tags:["boss"]}
+[t0] > summon minecraft:horse ~ ~ ~ {Tags:["mcs.interact.main.h"]}
+[t0] > damage @e[tag=boss,limit=1] 4 minecraft:magic by @e[tag=mcs.interact.main.h,limit=1]
+[t0] > ride @e[tag=boss,limit=1] mount @e[tag=mcs.interact.main.h,limit=1]
+[t0] > ride @e[tag=boss,limit=1] dismount
+[t0] > effect give @e[tag=boss,limit=1] minecraft:speed 10 1
+[t0] > tp @e[tag=boss,limit=1] @e[tag=mcs.interact.main.h,limit=1]
+[t0] > tp @s ~ ~ ~ ~ ~
+[t0] > data modify entity @e[tag=boss,limit=1] Motion set value [0d,0.5d,0d]
+[t0] > execute store success score $main#t4 mcs.interact at @e[tag=boss,limit=1] if dimension minecraft:overworld
+[t0] angry=True exists=True near=True over=False
+[t0] > summon minecraft:interaction ~ ~ ~ {Tags:["mcs.interact.main.box"]}
+[t0] > data modify entity @e[tag=mcs.interact.main.box,limit=1] width set value 2f
+[t0] > data modify entity @e[tag=mcs.interact.main.box,limit=1] height set value 1f
+[t0] > data modify entity @e[tag=mcs.interact.main.box,limit=1] response set value 1b
+[t0] > execute store success score $main#t6 mcs.interact if data entity @e[tag=mcs.interact.main.box,limit=1] interaction
+[t0] > data modify entity @e[tag=boss,limit=1] DeathLootTable set value "minecraft:empty"
+[t0] > data modify entity @e[tag=mcs.interact.main.h,limit=1] Tame set value 1b
+[t0] ! Found no elements matching Air  ← data get entity @e[tag=boss,limit=1] Air 1
+[t0] > data modify storage interact:data boss.pos set from entity @e[tag=boss,limit=1] Pos
+[t0] > data merge block 1 2 3 {Lock:"key"}
+[t0] air=0 saved=False
+[t0] > execute if block 5 64 5 minecraft:oak_door[facing=north] run data modify storage interact:mcs blk.facing set value "north"
+[t0] > execute if block 5 64 5 minecraft:oak_door[facing=south] run data modify storage interact:mcs blk.facing set value "south"
+[t0] > execute if block 5 64 5 minecraft:oak_door[facing=west] run data modify storage interact:mcs blk.facing set value "west"
+[t0] > execute if block 5 64 5 minecraft:oak_door[facing=east] run data modify storage interact:mcs blk.facing set value "east"
+[t0] > execute if block 5 64 5 minecraft:oak_door[half=upper] run data modify storage interact:mcs blk.half set value "upper"
+[t0] > execute if block 5 64 5 minecraft:oak_door[half=lower] run data modify storage interact:mcs blk.half set value "lower"
+[t0] > execute if block 5 64 5 minecraft:oak_door[hinge=left] run data modify storage interact:mcs blk.hinge set value "left"
+[t0] > execute if block 5 64 5 minecraft:oak_door[hinge=right] run data modify storage interact:mcs blk.hinge set value "right"
+[t0] > execute if block 5 64 5 minecraft:oak_door[powered=true] run data modify storage interact:mcs blk.powered set value "true"
+[t0] > execute if block 5 64 5 minecraft:oak_door[powered=false] run data modify storage interact:mcs blk.powered set value "false"
+[t0] > execute if block 5 64 5 minecraft:oak_door run function interact:__macro/m0 with storage interact:mcs blk
+[t0] > execute if block 5 64 5 minecraft:oak_door[open=true] run scoreboard players set $main#t9 mcs.interact 1
+[t0] > execute if block 5 64 5 minecraft:oak_door[open=false] run scoreboard players set $main#t9 mcs.interact 0
+[t0] > execute if block 5 64 5 minecraft:oak_door[facing=north] run scoreboard players set $main#t10 mcs.interact 0
+[t0] > execute if block 5 64 5 minecraft:oak_door[facing=south] run scoreboard players set $main#t10 mcs.interact 1
+[t0] > execute if block 5 64 5 minecraft:oak_door[facing=west] run scoreboard players set $main#t10 mcs.interact 2
+[t0] > execute if block 5 64 5 minecraft:oak_door[facing=east] run scoreboard players set $main#t10 mcs.interact 3
+[t0] pong
+[t0] pong
+[t0] s=5 q=49 open=False

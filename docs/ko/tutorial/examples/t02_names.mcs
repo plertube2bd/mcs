@@ -1,0 +1,19 @@
+// 튜토리얼 2: 정적 변수 이름 묶기
+static class Lights
+{
+    public static bool lit = true;
+    public static int level = 15;
+}
+
+static class Clock
+{
+    public static bool isNight = false;
+    public static int level = 3;   // Lights.level과 다른 스코어
+}
+
+public static void Main()
+{
+    Clock.isNight = true;
+    Lights.lit = !Clock.isNight;
+    m.Console.WriteLine($"lit={Lights.lit} night={Clock.isNight} {Lights.level} {Clock.level}");
+}

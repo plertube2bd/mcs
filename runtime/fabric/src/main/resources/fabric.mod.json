@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "mcs",
+  "version": "${version}",
+  "name": "MC# Runtime",
+  "description": "Runtime services for MC# datapacks: fast paths, permission level 3-4 commands from functions, /<namespace>:<function> shortcuts, a debugger (/mcs) and an interpreter (/mcsi).",
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": { "main": ["mcs.runtime.fabric.McsFabric"] },
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": ">=26.1 <26.4",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}
